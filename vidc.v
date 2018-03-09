@@ -31,7 +31,7 @@ module vidc
 	input 	 	  clkcpu, // cpu bus clock domain
 
 	input 		  clkpix,
-	output reg    cepix,
+	output reg    cepix_hi,
 
 	// "wishbone" interface
 	input 	 	  rst_i,
@@ -104,6 +104,8 @@ wire		snd_load;
 wire		currq_int;
 wire		vidrq_int;
 
+reg      cepix;
+
 always @(negedge clkpix) begin
 	reg [2:0] div6 = 0;
 	reg [1:0] div4 = 0;
@@ -117,6 +119,11 @@ always @(negedge clkpix) begin
 		1: cepix <= !div4;
 		2: cepix <= ((div6 == 0) || (div6 == 3));
 		3: cepix <= !div4[0];
+	endcase
+	
+	case(vidc_cr[0])
+		0: cepix_hi <= ((div6 == 0) || (div6 == 3));
+		1: cepix_hi <= !div4[0];
 	endcase
 end
 
@@ -223,17 +230,17 @@ initial begin
 	// clear the palette. 
 	for (c = 0; c < 16; c = c + 1) begin
 	
-		vidc_palette[c] = 13'd0;
+		vidc_palette[c]= 13'd0;
  	
 	end
 
 	vidc_cr				= 16'hFFF0;
 	
-	pix_shift_count		= 3'd0;
+	pix_shift_count	= 3'd0;
 	pix_data_latch		= 8'd0;
-	pix_load			= 1'b0;
+	pix_load				= 1'b0;
 	
-	csr_shift_count		= 3'd0;
+	csr_shift_count	= 3'd0;
 	csr_data_latch		= 8'd0;
 	csr_load_count		= 'd0;
 	csr_load		   	= 1'b0;
@@ -286,11 +293,11 @@ always @(posedge clkpix) begin
 
 	if(cepix) begin
 		cur_enabled_r <= cur_enabled;
-		pix_load 		<= pix_ack;
-		csr_load			<= csr_ack;
+		pix_load 	<= pix_ack;
+		csr_load		<= csr_ack;
 		
-		enabled_d1		<= enabled;
-		enabled_d2		<= enabled_d1;
+		enabled_d1	<= enabled;
+		enabled_d2	<= enabled_d1;
 		
 		if (flybk == 1'b1) begin 
 		
@@ -318,7 +325,7 @@ always @(posedge clkpix) begin
 				end
 				
 				2'b10: begin
-					pix_data_latch <= {4'b00, pix_data_latch[7:4]};
+					pix_data_latch <= {4'b0000, pix_data_latch[7:4]};
 					pix_shift_count <= pix_shift_count + 3'd4;
 				end
 				
@@ -378,7 +385,7 @@ assign video_g[1:0] = vidc_colour[5:4];
 assign video_b[3]	  = hicolour ? pix_data_latch[7] : vidc_colour[11];
 assign video_b[2:0] = vidc_colour[10:8];
 
-assign video_en     = border;
+assign video_en     = enabled;
 
 // this demux's the two dma channels that share the vidrq. 
 assign vidrq = hsync ? vidrq_int : ~vid_load & currq_int;

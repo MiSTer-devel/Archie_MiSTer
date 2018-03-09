@@ -110,7 +110,8 @@ assign VIDEO_ARY = status[1] ? 8'd9  : 8'd3;
 `include "build_id.v" 
 localparam CONF_STR = {
 	"ARCHIE;;",
-	"V,v1.00.",`BUILD_DATE
+	"J,Fire;",
+	"V,v1.10.",`BUILD_DATE
 };
 
 ////////////////////   CLOCKS   ///////////////////

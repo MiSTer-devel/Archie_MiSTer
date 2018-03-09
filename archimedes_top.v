@@ -195,7 +195,7 @@ memc MEMC(
 vidc VIDC(
 
 	  .clkpix	( CLKPIX_I	),
-	  .cepix		( CEPIX_O	),
+	  .cepix_hi	( CEPIX_O	),
 
 	  .clkcpu	( CLKCPU_I	),  
 	  .rst_i		( RESET_I),

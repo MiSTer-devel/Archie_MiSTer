@@ -1,8 +1,8 @@
 //============================================================================
 //  Acorn Archimedes
 // 
-//  Port to MiSTer
-//  Copyright (C) 2017 Sorgelig
+//  Port to MiSTer.
+//  Copyright (C) 2017,2018 Sorgelig
 //
 //  This program is free software; you can redistribute it and/or modify it
 //  under the terms of the GNU General Public License as published by the Free
@@ -29,7 +29,7 @@ module emu
 	input         RESET,
 
 	//Must be passed to hps_io module
-	inout  [43:0] HPS_BUS,
+	inout  [44:0] HPS_BUS,
 
 	//Base video clock. Usually equals to CLK_SYS.
 	output        CLK_VIDEO,
@@ -51,7 +51,7 @@ module emu
 
 	output        LED_USER,  // 1 - ON, 0 - OFF.
 
-	// b[1]: 0 - LED status is system status ORed with b[0]
+	// b[1]: 0 - LED status is system status OR'd with b[0]
 	//       1 - LED status is controled solely by b[0]
 	// hint: supply 2'b00 to let the system control the LED.
 	output  [1:0] LED_POWER,
@@ -59,7 +59,8 @@ module emu
 
 	output [15:0] AUDIO_L,
 	output [15:0] AUDIO_R,
-	output        AUDIO_S, // 1 - signed audio samples, 0 - unsigned
+	output        AUDIO_S,   // 1 - signed audio samples, 0 - unsigned
+	output  [1:0] AUDIO_MIX, // 0 - no mix, 1 - 25%, 2 - 50%, 3 - 100% (mono)
 	input         TAPE_IN,
 
 	// SD-SPI
@@ -67,6 +68,7 @@ module emu
 	output        SD_MOSI,
 	input         SD_MISO,
 	output        SD_CS,
+	input         SD_CD,
 
 	//High latency DDR3 RAM interface
 	//Use for non-critical time purposes
@@ -201,40 +203,7 @@ hps_io #(.STRLEN($size(CONF_STR)>>3)) hps_io
 );
 
 assign AUDIO_S = 0;
-wire [15:0] sample_l, sample_r;
-
-wire ce_lpf;
-always @(negedge clk_32m) begin
-	reg [3:0] div;
-
-	div <= div + 1'd1;
-	if(div == 8) div <=0;
-
-	ce_lpf <= !div;
-end
-
-lpf48k lpf48k_l
-(
-	.RESET(0),
-	.CLK(clk_32m),
-	.CE(ce_lpf),
-
-	.ENABLE(1),
-	.IDATA(sample_r),
-	.ODATA(AUDIO_R)
-);
-
-lpf48k lpf48k_r
-(
-	.RESET(0),
-	.CLK(clk_32m),
-	.CE(ce_lpf),
-
-	.ENABLE(1),
-	.IDATA(sample_l),
-	.ODATA(AUDIO_L)
-);
-
+assign AUDIO_MIX = status[3:2];
 
 wire [3:0]	core_r, core_g, core_b;
 wire			core_hs, core_vs;
@@ -285,8 +254,8 @@ archimedes_top ARCHIMEDES
 	.VIDEO_B		( core_b				),
 	.VIDEO_EN   ( VGA_DE          ),
 
-	.AUDIO_L		( sample_l			),
-	.AUDIO_R		( sample_r			),
+	.AUDIO_L		( AUDIO_L			),
+	.AUDIO_R		( AUDIO_R			),
 
 	.I2C_DOUT	( i2c_din			),
 	.I2C_DIN		( i2c_dout			),

@@ -100,7 +100,13 @@ always @(posedge cpu_clk) begin
    end
    
 end
-                 
+
+reg [7:0] aud_data_l, aud_data_r;
+always @(posedge aud_clk) begin
+	aud_left  <= mulaw_table[aud_data_l];
+	aud_right <= mulaw_table[aud_data_r];
+end
+
 always @(posedge aud_clk) begin
 
 	if(aud_ce) begin
@@ -122,17 +128,8 @@ always @(posedge aud_clk) begin
 
 				channel <= channel + 1'd1;
 
-				if ((vidc_mixer[2] == 1'b0) | (channel[1:0] == 2'b00)) begin
-
-					aud_left <= mulaw_table[aud_data];
-
-				end
-
-				if (vidc_mixer[2] == 1'b1) begin
-
-					aud_right <= mulaw_table[aud_data];
-					
-				end       
+				if ((vidc_mixer[2] == 1'b0) | (channel[1:0] == 2'b00)) aud_data_l <= aud_data;
+				if (vidc_mixer[2] == 1'b1)                             aud_data_r <= aud_data;
 
 				aud_en <= 1'b1;
 				aud_delay_count <= vidc_sfr[7:0];

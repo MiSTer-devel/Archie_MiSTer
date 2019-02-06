@@ -2,7 +2,7 @@
 //  Acorn Archimedes
 // 
 //  Port to MiSTer.
-//  Copyright (C) 2017,2018 Sorgelig
+//  Copyright (C) 2017-2019 Sorgelig
 //
 //  This program is free software; you can redistribute it and/or modify it
 //  under the terms of the GNU General Public License as published by the Free
@@ -48,6 +48,8 @@ module emu
 	output        VGA_HS,
 	output        VGA_VS,
 	output        VGA_DE,    // = ~(VBlank | HBlank)
+	output        VGA_F1,
+	output [1:0]  VGA_SL,
 
 	output        LED_USER,  // 1 - ON, 0 - OFF.
 
@@ -94,9 +96,19 @@ module emu
 	output        SDRAM_nCS,
 	output        SDRAM_nCAS,
 	output        SDRAM_nRAS,
-	output        SDRAM_nWE
+	output        SDRAM_nWE,
+
+	input         UART_CTS,
+	output        UART_RTS,
+	input         UART_RXD,
+	output        UART_TXD,
+	output        UART_DTR,
+	input         UART_DSR,
+
+	input         OSD_STATUS
 );
 
+assign {UART_RTS, UART_TXD, UART_DTR} = 0;
 assign {DDRAM_CLK, DDRAM_BURSTCNT, DDRAM_ADDR, DDRAM_DIN, DDRAM_BE, DDRAM_RD, DDRAM_WE} = 0; 
 assign {SD_SCK, SD_MOSI, SD_CS} = 'Z;
 
@@ -111,7 +123,7 @@ assign VIDEO_ARY = status[1] ? 8'd9  : 8'd3;
 localparam CONF_STR = {
 	"ARCHIE;;",
 	"J,Fire;",
-	"V,v1.10.",`BUILD_DATE
+	"V,v",`BUILD_DATE
 };
 
 ////////////////////   CLOCKS   ///////////////////
@@ -127,14 +139,14 @@ wire clk_32m;
 	24, 16,   12,   8
 */
 
-assign CLK_VIDEO = CLK_50M;
 
 pll pll
 (
 	.refclk(CLK_50M),
-	.rst(0),
 	.outclk_0(clk_128m),
-	.outclk_1(clk_32m),
+	.outclk_1(SDRAM_CLK),
+	.outclk_2(clk_32m),
+	.outclk_3(CLK_VIDEO),
 	.locked(pll_ready)
 );
 
@@ -214,6 +226,8 @@ assign VGA_G  = {core_g,core_g};
 assign VGA_B  = {core_b,core_b};
 assign VGA_HS = ~core_hs;
 assign VGA_VS = ~core_vs;
+assign VGA_F1 = 0;
+assign VGA_SL = 0;
 
 wire			core_ack_in;
 wire			core_stb_out;
@@ -318,8 +332,6 @@ sdram_top SDRAM
 	.sd_cas_n   (SDRAM_nCAS  ),
 	.sd_ready	(ram_ready   )
 );
-
-assign SDRAM_CLK = clk_128m;
 
 i2cSlaveTop CMOS
 (

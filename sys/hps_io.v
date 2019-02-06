@@ -1,10 +1,10 @@
 //
 // hps_io.v (Archie only)
 //
-// mist_io-like module for the Terasic DE10 board
+// mist_io-like module for MiSTer
 //
 // Copyright (c) 2014 Till Harbaum <till@harbaum.org>
-// Copyright (c) 2017 Sorgelig (port to DE10-nano)
+// Copyright (c) 2017-2019 Sorgelig
 //
 // This source file is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published
@@ -37,13 +37,26 @@ module hps_io #(parameter STRLEN=0, WIDE=0, VDNUM=1)
 
 	output reg [15:0] joystick_0,
 	output reg [15:0] joystick_1,
+	output reg [15:0] joystick_2,
+	output reg [15:0] joystick_3,
+	output reg [15:0] joystick_4,
+	output reg [15:0] joystick_5,
 	output reg [15:0] joystick_analog_0,
 	output reg [15:0] joystick_analog_1,
+	output reg [15:0] joystick_analog_2,
+	output reg [15:0] joystick_analog_3,
+	output reg [15:0] joystick_analog_4,
+	output reg [15:0] joystick_analog_5,
 
 	output      [1:0] buttons,
 	output            forced_scandoubler,
 
 	output reg [31:0] status,
+	input      [31:0] status_in,
+	input             status_set,
+
+	//toggle to force notify of video mode change
+	input             new_vmode,
 
 	// SD config
 	output reg [VD:0] img_mounted,  // signaling that new image has been mounted
@@ -81,7 +94,13 @@ module hps_io #(parameter STRLEN=0, WIDE=0, VDNUM=1)
 	output reg  [7:0] fdc_data_in,
 
 	// RTC MSM6242B layout
-	output reg [63:0] RTC,
+	output reg [64:0] RTC,
+
+	// Seconds since 1970-01-01 00:00:00
+	output reg [32:0] TIMESTAMP,
+
+	// UART flags
+	input      [15:0] uart_mode,
 
 	input       [7:0] kbd_out_data,
 	input             kbd_out_strobe,
@@ -146,7 +165,7 @@ integer hcnt;
 
 always @(posedge clk_vid) begin
 	integer vcnt;
-	reg old_vs= 0, old_de = 0;
+	reg old_vs= 0, old_de = 0, old_vmode = 0;
 	reg calch = 0;
 
 	if(ce_pix) begin
@@ -159,7 +178,8 @@ always @(posedge clk_vid) begin
 
 		if(old_vs & ~vs) begin
 			if(hcnt && vcnt) begin
-				if(vid_hcnt != hcnt || vid_vcnt != vcnt) vid_nres <= vid_nres + 1'd1;
+				old_vmode <= new_vmode;
+				if(vid_hcnt != hcnt || vid_vcnt != vcnt || old_vmode != new_vmode) vid_nres <= vid_nres + 1'd1;
 				vid_hcnt <= hcnt;
 				vid_vcnt <= vcnt;
 			end
@@ -236,6 +256,15 @@ always@(posedge clk_sys) begin
 	
 	reg  old_out_strobe = 0;
 	reg  kbd_out_data_available = 0;    
+	reg  [3:0] stflg = 0;
+	reg [31:0] status_req;
+	reg        old_status_set = 0;
+
+	old_status_set <= status_set;
+	if(~old_status_set & status_set) begin
+		stflg <= stflg + 1'd1;
+		status_req <= status_in;
+	end
 
 	sd_buff_wr <= b_wr[0];
 	if(b_wr[2] && (~&sd_buff_addr)) sd_buff_addr <= sd_buff_addr + 1'b1;
@@ -248,6 +277,7 @@ always@(posedge clk_sys) begin
 	fdc_data_in_strobe <= 0;
 
 	if(~io_enable) begin
+		if(cmd == 'h22) RTC[64] <= ~RTC[64];
 		cmd <= 0;
 		byte_cnt <= 0;
 		sd_ack <= 0;
@@ -266,6 +296,8 @@ always@(posedge clk_sys) begin
 					'h19: sd_ack_conf <= 1;
 					'h17,
 					'h18: sd_ack <= 1;
+					'h29: io_dout <= {4'hA, stflg};
+					'h2B: io_dout <= 1;
 				endcase
 
 				sd_buff_addr <= 0;
@@ -277,6 +309,10 @@ always@(posedge clk_sys) begin
 					'h01: cfg        <= io_din[7:0]; 
 					'h02: joystick_0 <= io_din;
 					'h03: joystick_1 <= io_din;
+					'h10: joystick_2 <= io_din;
+					'h11: joystick_3 <= io_din;
+					'h12: joystick_4 <= io_din;
+					'h13: joystick_5 <= io_din;
 
 					'h04: begin
 							if(byte_cnt == 1) begin
@@ -292,20 +328,15 @@ always@(posedge clk_sys) begin
 							kbd_in_data <= io_din[7:0];
 						end
 
-					// reading config string
-					'h14: begin
-							// returning a byte from string
-							if(byte_cnt < STRLEN + 1) io_dout[7:0] <= conf_str[(STRLEN - byte_cnt)<<3 +:8];
-						end
+					// reading config string, returning a byte from string
+					'h14: if(byte_cnt < STRLEN + 1) io_dout[7:0] <= conf_str[(STRLEN - byte_cnt)<<3 +:8];
 
 					// reading sd card status
-					'h16: begin
-							case(byte_cnt)
+					'h16: case(byte_cnt)
 								1: io_dout <= sd_cmd;
 								2: io_dout <= sd_lba[15:0];
 								3: io_dout <= sd_lba[31:16];
 							endcase
-						end
 
 					// send SD config IO -> FPGA
 					// flag that download begins
@@ -326,14 +357,17 @@ always@(posedge clk_sys) begin
 						end
 
 					// joystick analog
-					'h1a: begin
-							// first byte is joystick index
-							if(byte_cnt == 1) stick_idx <= io_din[2:0];
-							if(byte_cnt == 2) begin
-								if(stick_idx == 0) joystick_analog_0 <= io_din;
-								if(stick_idx == 1) joystick_analog_1 <= io_din;
-							end
-						end
+					'h1a: case(byte_cnt)
+								1: stick_idx <= io_din[2:0]; // first byte is joystick index
+								2: case(stick_idx)
+										0: joystick_analog_0 <= io_din;
+										1: joystick_analog_1 <= io_din;
+										2: joystick_analog_2 <= io_din;
+										3: joystick_analog_3 <= io_din;
+										4: joystick_analog_4 <= io_din;
+										5: joystick_analog_5 <= io_din;
+									endcase
+							endcase
 
 					// notify image selection
 					'h1c: begin
@@ -352,23 +386,33 @@ always@(posedge clk_sys) begin
 					'h22: RTC[(byte_cnt-6'd1)<<4 +:16] <= io_din;
 
 					//Video res.
-					'h23: begin
-								case(byte_cnt)
-									1: io_dout <= vid_nres;
-									2: io_dout <= vid_hcnt[15:0];
-									3: io_dout <= vid_hcnt[31:16];
-									4: io_dout <= vid_vcnt[15:0];
-									5: io_dout <= vid_vcnt[31:16];
-									6: io_dout <= vid_htime[15:0];
-									7: io_dout <= vid_htime[31:16];
-									8: io_dout <= vid_vtime[15:0];
-									9: io_dout <= vid_vtime[31:16];
-								  10: io_dout <= vid_pix[15:0];
-								  11: io_dout <= vid_pix[31:16];
-								  12: io_dout <= vid_vtime_hdmi[15:0];
-								  13: io_dout <= vid_vtime_hdmi[31:16];
-								endcase
-						end
+					'h23: case(byte_cnt)
+								1: io_dout <= vid_nres;
+								2: io_dout <= vid_hcnt[15:0];
+								3: io_dout <= vid_hcnt[31:16];
+								4: io_dout <= vid_vcnt[15:0];
+								5: io_dout <= vid_vcnt[31:16];
+								6: io_dout <= vid_htime[15:0];
+								7: io_dout <= vid_htime[31:16];
+								8: io_dout <= vid_vtime[15:0];
+								9: io_dout <= vid_vtime[31:16];
+							  10: io_dout <= vid_pix[15:0];
+							  11: io_dout <= vid_pix[31:16];
+							  12: io_dout <= vid_vtime_hdmi[15:0];
+							  13: io_dout <= vid_vtime_hdmi[31:16];
+							endcase
+
+					//RTC
+					'h24: TIMESTAMP[(byte_cnt-6'd1)<<4 +:16] <= io_din;
+
+					//UART flags
+					'h28: io_dout <= uart_mode;
+
+					//status set
+					'h29: case(byte_cnt)
+								1: io_dout <= status_req[15:0];
+								2: io_dout <= status_req[31:16];
+							endcase
 
 					'h55: //ARCHIE_FDC_GET_STATUS:
 						begin

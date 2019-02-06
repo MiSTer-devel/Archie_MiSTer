@@ -3,6 +3,7 @@ create_clock -period "50.0 MHz" [get_ports FPGA_CLK1_50]
 create_clock -period "50.0 MHz" [get_ports FPGA_CLK2_50]
 create_clock -period "50.0 MHz" [get_ports FPGA_CLK3_50]
 create_clock -period "100.0 MHz" [get_pins -compatibility_mode *|h2f_user0_clk] 
+create_clock -period 10.0 [get_pins -compatibility_mode spi|sclk_out] -name spi_sck
 
 derive_pll_clocks
 
@@ -28,8 +29,11 @@ set_input_delay -min -clock SDRAM_CLK 3.7ns [get_ports SDRAM_DQ[*]]
                     -to [get_clocks {*|pll|pll_inst|altera_pll_i|general[0].gpll~PLL_OUTPUT_COUNTER|divclk}] \
                                                   -setup 2
 
-set_output_delay -max -clock SDRAM_CLK -0.9ns [get_ports {SDRAM_D* SDRAM_A* SDRAM_BA* SDRAM_n* SDRAM_CKE}]
-set_output_delay -min -clock SDRAM_CLK -1.6ns [get_ports {SDRAM_D* SDRAM_A* SDRAM_BA* SDRAM_n* SDRAM_CKE}]
+set_multicycle_path -from {*|vidc:VIDC|*} -to [get_clocks {*|pll|pll_inst|altera_pll_i|general[3].gpll~PLL_OUTPUT_COUNTER|divclk}] -setup 2
+set_multicycle_path -from {*|vidc:VIDC|*} -to [get_clocks {*|pll|pll_inst|altera_pll_i|general[3].gpll~PLL_OUTPUT_COUNTER|divclk}] -hold 2
+
+set_output_delay -max -clock SDRAM_CLK 1.6ns [get_ports {SDRAM_D* SDRAM_A* SDRAM_BA* SDRAM_n* SDRAM_CKE}]
+set_output_delay -min -clock SDRAM_CLK -0.9ns [get_ports {SDRAM_D* SDRAM_A* SDRAM_BA* SDRAM_n* SDRAM_CKE}]
 
 # Decouple different clock groups (to simplify routing)
 set_clock_groups -asynchronous \
@@ -40,6 +44,9 @@ set_clock_groups -asynchronous \
 
 set_output_delay -max -clock HDMI_CLK 2.0ns [get_ports {HDMI_TX_D[*] HDMI_TX_DE HDMI_TX_HS HDMI_TX_VS}]
 set_output_delay -min -clock HDMI_CLK -1.5ns [get_ports {HDMI_TX_D[*] HDMI_TX_DE HDMI_TX_HS HDMI_TX_VS}]
+
+set_false_path -from {*} -to [get_registers {wcalc[*] hcalc[*]}]
+
 
 # Put constraints on input ports
 set_false_path -from [get_ports {KEY*}] -to *

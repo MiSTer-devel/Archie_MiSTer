@@ -128,10 +128,6 @@ localparam CONF_STR = {
 
 ////////////////////   CLOCKS   ///////////////////
 
-wire pll_ready;
-wire clk_128m;
-wire clk_32m;
-
 /*
 	24, 16,   12,   8
 	25, 16.6, 12.6, 8.3
@@ -139,6 +135,85 @@ wire clk_32m;
 	24, 16,   12,   8
 */
 
+vpll vpll
+(
+	.refclk(CLK_50M),
+	.rst(reset),
+	.reconfig_to_pll(reconfig_to_pll),
+	.reconfig_from_pll(reconfig_from_pll),
+	.outclk_0(CLK_VIDEO)
+);
+
+wire [63:0] reconfig_to_pll;
+wire [63:0] reconfig_from_pll;
+wire        cfg_waitrequest;
+reg         cfg_write;
+reg   [5:0] cfg_address;
+reg  [31:0] cfg_writedata;
+
+altera_pll_reconfig_top #(
+	.device_family       ("Cyclone V"),
+	.ENABLE_MIF          (1),
+	.MIF_FILE_NAME       ("vpll_conf.mif"),
+	.ENABLE_BYTEENABLE   (0),
+	.BYTEENABLE_WIDTH    (4),
+	.RECONFIG_ADDR_WIDTH (6),
+	.RECONFIG_DATA_WIDTH (32),
+	.reconf_width        (64),
+	.WAIT_FOR_LOCK       (1)
+) vpll_cfg (
+	.mgmt_reset        (reset),
+	.mgmt_clk          (CLK_50M),
+	.mgmt_write        (cfg_write),
+	.mgmt_address      (cfg_address),
+	.mgmt_writedata    (cfg_writedata),
+	.mgmt_waitrequest  (cfg_waitrequest),
+	.reconfig_to_pll   (reconfig_to_pll),
+	.reconfig_from_pll (reconfig_from_pll)
+);
+
+always @(posedge CLK_50M) begin
+	reg [2:0] cfg_state = 0;
+	reg       cfg_start = 0;
+	reg [1:0] cfg_cur;
+
+	if(reset) cfg_start <= 1;
+	else begin
+		cfg_cur <= pixbaseclk_select;
+		if(cfg_cur != pixbaseclk_select) cfg_start = 1;
+	
+		if(!cfg_waitrequest) begin
+			cfg_write <= 0;
+			case(cfg_state)
+				0: if(cfg_start) begin
+						cfg_cur <= pixbaseclk_select;
+						cfg_start <= 0;
+						cfg_state <= cfg_state + 1'd1;
+					end
+				1: begin
+						cfg_address <= 31;
+						cfg_writedata <= {cfg_cur,6'b000000};
+						cfg_write <= 1;
+						cfg_state <= cfg_state + 1'd1;
+					end
+				2: cfg_state <= cfg_state + 1'd1;
+				3: begin
+						cfg_address <= 2;
+						cfg_writedata <= 0;
+						cfg_write <= 1;
+						cfg_state <= cfg_state + 1'd1;
+					end
+				4: cfg_state <= cfg_state + 1'd1;
+				5: cfg_state <= 0;
+			endcase
+		end
+	end
+end
+
+
+wire pll_ready;
+wire clk_128m;
+wire clk_32m;
 
 pll pll
 (
@@ -146,7 +221,6 @@ pll pll
 	.outclk_0(clk_128m),
 	.outclk_1(SDRAM_CLK),
 	.outclk_2(clk_32m),
-	.outclk_3(CLK_VIDEO),
 	.locked(pll_ready)
 );
 

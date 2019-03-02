@@ -367,6 +367,7 @@ set_global_assignment -name PRE_FLOW_SCRIPT_FILE "quartus_sh:sys/build_id.tcl"
 
 set_global_assignment -name CDF_FILE jtag.cdf
 set_global_assignment -name QIP_FILE sys/sys.qip
+set_global_assignment -name QIP_FILE vpll.qip
 set_global_assignment -name VERILOG_FILE fdc1772.v
 set_global_assignment -name VERILOG_FILE latches.v
 set_global_assignment -name VERILOG_FILE floppy.v

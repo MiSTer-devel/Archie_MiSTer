@@ -1,5 +1,4 @@
-/*	sdram_top.v
-
+/*	
 	Copyright (c) 2013-2014, Stephen J. Leary
 	All rights reserved.
 
@@ -26,85 +25,95 @@
 	SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE. 
 */
 
-module sdram_top (
-
+module sdram
+(
 	// interface to the MT48LC16M16 chip
-	input			sd_clk,		// sdram is accessed at 128MHz
-	input			sd_rst,		// reset the sdram controller.
-	output			sd_cke,		// clock enable.
-	inout  reg[15:0]sd_dq,		// 16 bit bidirectional data bus
-	output reg[12:0]sd_addr,	// 13 bit multiplexed address bus
-	output reg[1:0]	sd_dqm = 2'b00,		// two byte masks
-	output reg[1:0]	sd_ba = 2'b00,		// two banks
-	output			sd_cs_n,	// a single chip select
-	output			sd_we_n,	// write enable
-	output			sd_ras_n,	// row address select
-	output			sd_cas_n,	// columns address select
-	output reg		sd_ready = 0,	// sd ready.
+	input            sd_clk,		// sdram is accessed at 128MHz
+	input            sd_rst,		// reset the sdram controller.
+	output           sd_cke,		// clock enable.
+	inout  reg[15:0] sd_dq,		// 16 bit bidirectional data bus
+	output reg[12:0] sd_addr,	// 13 bit multiplexed address bus
+	output reg [1:0] sd_dqm = 2'b00,		// two byte masks
+	output reg [1:0] sd_ba = 2'b00,		// two banks
+	output           sd_cs_n,	// a single chip select
+	output           sd_we_n,	// write enable
+	output           sd_ras_n,	// row address select
+	output           sd_cas_n,	// columns address select
+	output reg       sd_ready = 0,	// sd ready.
 
 	// cpu/chipset interface
 
-	input          	wb_clk,     // 32MHz chipset clock to which sdram state machine is synchonized	
-	input	[31:0]	wb_dat_i,	// data input from chipset/cpu
-	output reg[31:0]wb_dat_o = 0,	// data output to chipset/cpu
-	output	reg		wb_ack = 0, 
-	input	[23:0]	wb_adr,		// lower 2 bits are ignored.
-	input	[3:0]	wb_sel,		// 
-	input	[2:0]	wb_cti,		// cycle type. 
-	input			wb_stb, 	//	
-	input			wb_cyc, 	// cpu/chipset requests cycle
-	input			wb_we   	// cpu/chipset requests write
+	input            wb_clk,     // 32MHz chipset clock to which sdram state machine is synchonized	
+	input     [31:0] wb_dat_i,	// data input from chipset/cpu
+	output reg[31:0] wb_dat_o = 0,	// data output to chipset/cpu
+	output reg       wb_ack = 0, 
+	input     [23:0] wb_adr,		// lower 2 bits are ignored.
+	input      [3:0] wb_sel,		// 
+	input      [2:0] wb_cti,		// cycle type. 
+	input            wb_stb, 	//	
+	input            wb_cyc, 	// cpu/chipset requests cycle
+	input            wb_we   	// cpu/chipset requests write
 );
 
-`include "sdram_defines.v"
+localparam RASCAS_DELAY   = 3'd3;   // tRCD=20ns -> 3 cycles@128MHz
+localparam BURST_LENGTH   = 3'b000; // 000=1, 001=2, 010=4, 011=8, 111 = continuous.
+localparam ACCESS_TYPE    = 1'b0;   // 0=sequential, 1=interleaved
+localparam CAS_LATENCY    = 3'd3;   // 2/3 allowed
+localparam OP_MODE        = 2'b00;  // only 00 (standard operation) allowed
+localparam NO_WRITE_BURST = 1'b1;   // 0= write burst enabled, 1=only single access write
+localparam WRITE_BURST 	  = 1'b0;   // 0= write burst enabled, 1=only single access write
+localparam RFC_DELAY      = 4'd7;   // tRFC=66ns -> 9 cycles@128MHz
+
+// all possible commands
+localparam CMD_INHIBIT         = 4'b1111;
+localparam CMD_NOP             = 4'b0111;
+localparam CMD_ACTIVE          = 4'b0011;
+localparam CMD_READ            = 4'b0101;
+localparam CMD_WRITE           = 4'b0100;
+localparam CMD_BURST_TERMINATE = 4'b0110;
+localparam CMD_PRECHARGE       = 4'b0010;
+localparam CMD_AUTO_REFRESH    = 4'b0001;
+localparam CMD_LOAD_MODE       = 4'b0000;
 
 localparam MODE = { 3'b000, NO_WRITE_BURST, OP_MODE, CAS_LATENCY, ACCESS_TYPE, BURST_LENGTH}; 
 
-reg [3:0]	t;
-reg [4:0]	reset;
-
-reg[31:0]	sd_dat	  = 0;	// data output to chipset/cpu
-reg[31:0]	sd_dat_nxt = 0;	// data output to chipset/cpu
-
-reg			sd_stb 	= 1'b0; // copy of the wishbone bus signal.
-reg			sd_we 	= 1'b0; // copy of the wishbone bus signal.
-reg			sd_cyc 	= 1'b0; // copy of the wishbone bus signal.
-reg			sd_burst = 1'b0;
-
-reg	[3:0]	sd_cycle= 4'd0;
-reg			sd_done = 1'b0;
-
-reg [3:0] 	sd_cmd 	= 4'd0;   // current command sent to sd ram
-
-reg [9:0]	sd_refresh = 10'd0;
-reg			sd_auto_refresh = 1'b0; 
-
-wire 		sd_reading;
-wire		sd_writing;
+reg [3:0] t;
+reg [4:0] reset;
+reg[31:0] sd_dat	  = 0; // data output to chipset/cpu
+reg[31:0] sd_dat_nxt = 0; // data output to chipset/cpu
+reg		 sd_stb 	= 0;   // copy of the wishbone bus signal.
+reg		 sd_we 	= 0;   // copy of the wishbone bus signal.
+reg		 sd_cyc 	= 0;   // copy of the wishbone bus signal.
+reg		 sd_burst = 0;
+reg [3:0] sd_cycle = 0;
+reg		 sd_done  = 0;
+reg [3:0] sd_cmd 	= 0;   // current command sent to sd ram
+reg [9:0] sd_refresh = 0;
+reg		 sd_auto_refresh = 0; 
 
 initial begin 
 	t			= 4'd0;
-	reset 		= 5'h1f;
-	sd_addr		= 13'd0;
-	sd_cmd 		= CMD_INHIBIT;
+	reset 	= 5'h1f;
+	sd_addr	= 13'd0;
+	sd_cmd 	= CMD_INHIBIT;
 end
 
-localparam CYCLE_RAS_START = 4'd1;  
+localparam CYCLE_RAS_START  = 4'd1;  
 localparam CYCLE_RFSH_START = CYCLE_RAS_START; 
-localparam CYCLE_CAS0 		= CYCLE_RFSH_START  + RASCAS_DELAY; 
-localparam CYCLE_CAS1 		= CYCLE_CAS0 + 4'd1;		
-localparam CYCLE_CAS2 		= CYCLE_CAS1 + 4'd1;		
-localparam CYCLE_CAS3 		= CYCLE_CAS2 + 4'd1;				
-localparam CYCLE_READ0	   	= CYCLE_CAS0 + CAS_LATENCY + 4'd1;
-localparam CYCLE_READ1	   	= CYCLE_READ0+ 1'd1;
-localparam CYCLE_READ2	   	= CYCLE_READ1+ 1'd1;
-localparam CYCLE_READ3	   	= CYCLE_READ2+ 1'd1;
-localparam CYCLE_END	   	= 4'hF;
-localparam CYCLE_WR_END		= CYCLE_CAS1 + 4'd4;
-localparam CYCLE_RFSH_END	= CYCLE_RFSH_START + RFC_DELAY; 
+localparam CYCLE_CAS0       = CYCLE_RFSH_START  + RASCAS_DELAY; 
+localparam CYCLE_CAS1       = CYCLE_CAS0 + 4'd1;		
+localparam CYCLE_CAS2       = CYCLE_CAS1 + 4'd1;		
+localparam CYCLE_CAS3       = CYCLE_CAS2 + 4'd1;				
+localparam CYCLE_READ0      = CYCLE_CAS0 + CAS_LATENCY + 4'd1;
+localparam CYCLE_READ1      = CYCLE_READ0+ 1'd1;
+localparam CYCLE_READ2      = CYCLE_READ1+ 1'd1;
+localparam CYCLE_READ3      = CYCLE_READ2+ 1'd1;
+localparam CYCLE_END        = 4'hF;
+localparam CYCLE_WR_END     = CYCLE_CAS1 + 4'd4;
+localparam CYCLE_RFSH_END   = CYCLE_RFSH_START + RFC_DELAY; 
 
-localparam RAM_CLK		   = 128000000;
-localparam REFRESH_PERIOD  = (RAM_CLK / (16 * 8192)) - CYCLE_END;
+localparam RAM_CLK          = 128000000;
+localparam REFRESH_PERIOD   = (RAM_CLK / (16 * 8192)) - CYCLE_END;
  
 always @(posedge sd_clk) begin 
 
@@ -299,42 +308,28 @@ always @(posedge sd_clk) begin
 end
 
 reg wb_burst;
-
 always @(posedge wb_clk) begin 
-	
-	wb_ack	<= sd_done & ~wb_ack;
-	
+	wb_ack <= sd_done & ~wb_ack;
 	if (wb_stb & wb_cyc) begin 
-	
 		if (sd_done & ~wb_ack) begin 
-	
 			wb_dat_o <= sd_dat;
 			wb_burst <= burst_mode;
-	
 		end
 		
 		if (wb_ack & wb_burst) begin 
-		
 			wb_ack	<= 1'b1;
 			wb_burst	<= 1'b0;
 			wb_dat_o <= sd_dat_nxt;
-			
 		end 
-		
-	
 	end else begin 
-	
 		wb_burst <= 1'b0;
-	
 	end
-
-		
 end
 
-assign burst_mode = wb_cti == 3'b010;
-assign can_burst = wb_adr[2] === 1'b0;
-assign sd_reading = sd_stb & sd_cyc & ~sd_we;
-assign sd_writing = sd_stb & sd_cyc & sd_we;
+wire burst_mode = wb_cti == 3'b010;
+wire can_burst = wb_adr[2] === 1'b0;
+wire sd_reading = sd_stb & sd_cyc & ~sd_we;
+wire sd_writing = sd_stb & sd_cyc & sd_we;
 
 // drive control signals according to current command
 assign sd_cs_n  = sd_cmd[3];

@@ -383,8 +383,7 @@ set_global_assignment -name VERILOG_FILE vidc_timing.v
 set_global_assignment -name VERILOG_FILE vidc.v
 set_global_assignment -name VERILOG_FILE memc.v
 set_global_assignment -name VHDL_FILE bram.vhd
-set_global_assignment -name VERILOG_FILE sdram_top.v
-set_global_assignment -name VERILOG_FILE sdram_init.v
+set_global_assignment -name VERILOG_FILE sdram.v
 set_global_assignment -name VERILOG_FILE amber/a23_barrel_shift.v
 set_global_assignment -name VERILOG_FILE amber/a23_wishbone.v
 set_global_assignment -name VERILOG_FILE amber/a23_register_bank.v

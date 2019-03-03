@@ -403,7 +403,7 @@ wire  [3:0]	ram_sel;
 wire [25:0] ram_address;
 wire			ram_ready;
 
-sdram_top SDRAM
+sdram SDRAM
 (
 	// wishbone interface
 	.wb_clk		(clk_32m		 ),

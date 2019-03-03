@@ -237,7 +237,7 @@ endmodule
 // Retrieval info: 	<generic name="gui_en_dps_ports" value="false" />
 // Retrieval info: 	<generic name="gui_en_phout_ports" value="false" />
 // Retrieval info: 	<generic name="gui_phout_division" value="1" />
-// Retrieval info: 	<generic name="gui_mif_generate" value="true" />
+// Retrieval info: 	<generic name="gui_mif_generate" value="false" />
 // Retrieval info: 	<generic name="gui_enable_mif_dps" value="false" />
 // Retrieval info: 	<generic name="gui_dps_cntr" value="C0" />
 // Retrieval info: 	<generic name="gui_dps_num" value="1" />

@@ -74,11 +74,10 @@ module archimedes_top(
 	output    [1:0] sd_rd,
 	output    [1:0] sd_wr,
 	input           sd_ack,
-	input     [8:0] sd_buff_addr,
-	input     [7:0] sd_dout,
-	output    [7:0] sd_din,
-	input           sd_dout_strobe,
-	input           sd_din_strobe,
+	input     [7:0] sd_buff_addr,
+	input    [15:0] sd_buff_dout,
+	output   [15:0] sd_buff_din,
+	input           sd_buff_wr,
 
 	// connection to keyboard controller
 	output [7:0]   KBD_OUT_DATA,
@@ -317,8 +316,8 @@ wire 		  	floppy_inuse;
 wire 		  	floppy_density;
 wire 		  	floppy_reset;
 
-fdc1772 FDC1772 (
-
+fdc1772 FDC1772
+(
 	.clkcpu			( CLKCPU_I				),
 	.clk8m_en		( ioc_clk8m_en			),
 
@@ -335,16 +334,15 @@ fdc1772 FDC1772 (
 	
 	.img_mounted    ( img_mounted           ),
 	.img_size       ( img_size              ),
-	.img_wp         ( 0                     ),
+	.img_wp        ( img_wp             ),
 	.sd_lba         ( sd_lba                ),
 	.sd_rd          ( sd_rd                 ),
 	.sd_wr          ( sd_wr                 ),
 	.sd_ack         ( sd_ack                ),
 	.sd_buff_addr   ( sd_buff_addr          ),
-	.sd_dout        ( sd_dout               ),
-	.sd_din         ( sd_din                ),
-	.sd_dout_strobe ( sd_dout_strobe        ),
-	.sd_din_strobe  ( sd_din_strobe         ),
+	.sd_buff_dout  ( sd_buff_dout       ),
+	.sd_buff_din   ( sd_buff_din        ),
+	.sd_buff_wr    ( sd_buff_wr         ),
 	
 	.floppy_drive	( floppy_drive			),
 	.floppy_motor	( floppy_motor			),

@@ -82,16 +82,12 @@ module hps_io #(parameter STRLEN=0, WIDE=0, VDNUM=1)
 
 	// ARM -> FPGA download
 	output reg        ioctl_download = 0, // signal indicating an active download
-	output      [3:0] ioctl_sel, 
+	output reg  [7:0] ioctl_index,        // menu index used to upload the file
 	output reg        ioctl_wr,
 	output reg [24:0] ioctl_addr,         // in WIDE mode address will be incremented by 2
-	output     [31:0] ioctl_dout,
+	output reg [DW:0] ioctl_dout,
+	output reg [31:0] ioctl_file_ext,
 	input             ioctl_wait,
-
-	input      [31:0] fdc_status_out,
-	output reg [31:0] fdc_status_in,
-	output reg        fdc_data_in_strobe,
-	output reg  [7:0] fdc_data_in,
 
 	// RTC MSM6242B layout
 	output reg [64:0] RTC,
@@ -274,8 +270,6 @@ always@(posedge clk_sys) begin
 	old_out_strobe <= kbd_out_strobe;
 	if(~old_out_strobe && kbd_out_strobe) kbd_out_data_available <= 1;
 	
-	fdc_data_in_strobe <= 0;
-
 	if(~io_enable) begin
 		if(cmd == 'h22) RTC[64] <= ~RTC[64];
 		cmd <= 0;
@@ -413,53 +407,30 @@ always@(posedge clk_sys) begin
 								1: io_dout <= status_req[15:0];
 								2: io_dout <= status_req[31:16];
 							endcase
-
-					'h55: //ARCHIE_FDC_GET_STATUS:
-						begin
-							if(byte_cnt == 1) io_dout[7:0] <= fdc_status_out[31:24];
-							if(byte_cnt == 2) io_dout[7:0] <= fdc_status_out[23:16];
-							if(byte_cnt == 3) io_dout[7:0] <= fdc_status_out[15:8];
-							if(byte_cnt == 4) io_dout[7:0] <= fdc_status_out[7:0];
-						end
-
-					'h56: //ARCHIE_FDC_TX_DATA:
-						begin
-							fdc_data_in_strobe <= 1;
-							fdc_data_in <= io_din[7:0];
-						end
-
-					'h57: //ARCHIE_FDC_SET_STATUS:
-						begin
-							if(byte_cnt == 1) fdc_status_in[31:24] <= io_din[7:0];
-							if(byte_cnt == 2) fdc_status_in[23:16] <= io_din[7:0];
-							if(byte_cnt == 3) fdc_status_in[15:8]  <= io_din[7:0];
-							if(byte_cnt == 4) fdc_status_in[7:0]   <= io_din[7:0];
-						end
 				endcase
 			end
 		end
 	end
 end
 
+
 ///////////////////////////////   DOWNLOADING   ///////////////////////////////
 
-localparam UIO_FILE_TX         = 8'h53;
-localparam UIO_FILE_TX_DAT     = 8'h54;
-
-assign ioctl_sel  = ioctl_addr[1] ? 4'b1100 : 4'b0011;
-assign ioctl_dout = {data,data};
-
-reg [15:0] data;
+localparam UIO_FILE_TX      = 8'h53;
+localparam UIO_FILE_TX_DAT  = 8'h54;
+localparam UIO_FILE_INDEX   = 8'h55;
+localparam UIO_FILE_INFO    = 8'h56;
 
 always@(posedge clk_sys) begin
 	reg [15:0] cmd;
+	reg  [2:0] cnt;
 	reg        has_cmd;
 	reg [24:0] addr;
 	reg        wr;
 
 	ioctl_wr <= wr;
 	wr <= 0;
-	
+
 	if(~io_enable) has_cmd <= 0;
 	else begin
 		if(io_strobe) begin
@@ -467,14 +438,29 @@ always@(posedge clk_sys) begin
 			if(!has_cmd) begin
 				cmd <= io_din;
 				has_cmd <= 1;
+				cnt <= 0;
 			end else begin
 
 				case(cmd)
+					UIO_FILE_INFO:
+						if(~cnt[1]) begin
+							case(cnt)
+								0: ioctl_file_ext[31:16] <= io_din;
+								1: ioctl_file_ext[15:00] <= io_din;
+							endcase
+							cnt <= cnt + 1'd1;
+						end
+
+					UIO_FILE_INDEX:
+						begin
+							ioctl_index <= io_din[7:0];
+						end
+
 					UIO_FILE_TX:
 						begin
 							if(io_din[7:0]) begin
-								addr <= 25'h400000;
-								ioctl_download <= 1; 
+								addr <= 0;
+								ioctl_download <= 1;
 							end else begin
 								ioctl_addr <= addr;
 								ioctl_download <= 0;
@@ -484,9 +470,9 @@ always@(posedge clk_sys) begin
 					UIO_FILE_TX_DAT:
 						begin
 							ioctl_addr <= addr;
-							data <= io_din;
+							ioctl_dout <= io_din[DW:0];
 							wr   <= 1;
-							addr <= addr + 2'd2;
+							addr <= addr + (WIDE ? 2'd2 : 2'd1);
 						end
 				endcase
 			end
@@ -495,4 +481,3 @@ always@(posedge clk_sys) begin
 end
 
 endmodule
-

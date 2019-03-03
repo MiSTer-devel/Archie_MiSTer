@@ -233,10 +233,10 @@ pll pll
 	.locked(pll_ready)
 );
 
-wire reset = buttons[1] | ~initReset_n;
+wire reset = status[0] | buttons[1] | ~initReset_n;
 
 reg initReset_n = 0;
-always @(posedge clk_32m) if(loader_active) initReset_n <= 1;
+always @(posedge clk_32m) if(ioctl_download) initReset_n <= 1;
 
 //////////////////   HPS I/O   ///////////////////
 wire [15:0] joyA;
@@ -249,19 +249,25 @@ wire        kbd_out_strobe;
 wire  [7:0] kbd_in_data;
 wire        kbd_in_strobe;
 
-wire [31:0] fdc_status_out;
-wire [31:0] fdc_status_in;
-wire  [7:0] fdc_data_in;
-wire        fdc_data_in_strobe;
+wire        ioctl_download;
+wire  [7:0] ioctl_index;
+wire        ioctl_wr;
+wire [24:0] ioctl_addr;
+wire [15:0] ioctl_dout;
 
-wire 			loader_active;
-wire 			loader_we;
-reg			loader_stb = 0;
-wire  [3:0]	loader_sel;
-wire [24:0]	loader_addr;
-wire [31:0]	loader_data;
+wire [31:0] sd_lba;
+wire  [1:0] sd_rd;
+wire  [1:0] sd_wr;
+wire        sd_ack;
+wire  [7:0] sd_buff_addr;
+wire [15:0] sd_buff_dout;
+wire [15:0] sd_buff_din;
+wire        sd_buff_wr;
+wire  [1:0] img_mounted;
+wire [31:0] img_size;
+wire        img_readonly;
 
-hps_io #(.STRLEN($size(CONF_STR)>>3)) hps_io
+hps_io #(.STRLEN($size(CONF_STR)>>3), .WIDE(1), .VDNUM(2)) hps_io
 (
 	.clk_sys(clk_32m),
 	.HPS_BUS(HPS_BUS),
@@ -279,23 +285,24 @@ hps_io #(.STRLEN($size(CONF_STR)>>3)) hps_io
 	.kbd_in_data(kbd_in_data),
 	.kbd_in_strobe(kbd_in_strobe),
 
-	.fdc_status_out(fdc_status_out),
-	.fdc_status_in(fdc_status_in),
-	.fdc_data_in_strobe(fdc_data_in_strobe),
-	.fdc_data_in(fdc_data_in),
+	.ioctl_index(ioctl_index),
+	.ioctl_download(ioctl_download),
+	.ioctl_addr(ioctl_addr),
+	.ioctl_dout(ioctl_dout),
+	.ioctl_wr(ioctl_wr),
+	.ioctl_wait(loader_stb),
 
-	.ioctl_wr(loader_we),
-	.ioctl_addr(loader_addr),
-	.ioctl_dout(loader_data),
-	.ioctl_download(loader_active),
-	.ioctl_sel(loader_sel),
-
-	.sd_lba(0),
-	.sd_rd(0),
-	.sd_wr(0),
-	.sd_conf(0),
-	.sd_buff_din(0),
-	.ioctl_wait(loader_stb)
+	.sd_lba(sd_lba),
+	.sd_rd(sd_rd),
+	.sd_wr(sd_wr),
+	.sd_ack(sd_ack),
+	.sd_buff_addr(sd_buff_addr),
+	.sd_buff_dout(sd_buff_dout),
+	.sd_buff_din(sd_buff_din),
+	.sd_buff_wr(sd_buff_wr),
+	.img_mounted(img_mounted),
+	.img_size(img_size),
+	.img_readonly(img_readonly)
 );
 
 assign AUDIO_S = 0;
@@ -332,7 +339,7 @@ archimedes_top ARCHIMEDES
 	.CLKPIX_I	( CLK_VIDEO			),
 	.CEPIX_O	 	( CE_PIXEL			),
 
-	.RESET_I	   (~ram_ready | loader_active | reset),
+	.RESET_I	   (~ram_ready | ioctl_download | reset),
 
 	.MEM_ACK_I	( core_ack_in		),
 	.MEM_DAT_I	( core_data_in		),
@@ -361,18 +368,25 @@ archimedes_top ARCHIMEDES
 
 	.DEBUG_LED	(    					),
 
-	.FDC_DIO_STATUS_OUT ( fdc_status_out  ),
-	.FDC_DIO_STATUS_IN  ( fdc_status_in  ),
-	.FDC_DIN_STROBE ( fdc_data_in_strobe  ),
-	.FDC_DIN        ( fdc_data_in  ),
+	.sd_lba       ( sd_lba       ),
+	.sd_rd        ( sd_rd        ),
+	.sd_wr        ( sd_wr        ),
+	.sd_ack       ( sd_ack       ),
+	.sd_buff_addr ( sd_buff_addr ),
+	.sd_buff_dout ( sd_buff_dout ),
+	.sd_buff_din  ( sd_buff_din  ),
+	.sd_buff_wr   ( sd_buff_wr   ),
+	.img_mounted  ( img_mounted  ),
+	.img_size     ( img_size     ),
+	.img_wp       ( img_readonly ),
 
 	.KBD_OUT_DATA   ( kbd_out_data   ),
 	.KBD_OUT_STROBE ( kbd_out_strobe ),
 	.KBD_IN_DATA    ( kbd_in_data    ),
 	.KBD_IN_STROBE  ( kbd_in_strobe  ),
 
-	.JOYSTICK0		 (~{joyA[4], joyA[0],joyA[1],joyA[2],joyA[3]}),
-	.JOYSTICK1		 (~{joyB[4], joyB[0],joyB[1],joyB[2],joyB[3]}),
+	.JOYSTICK0		 (~{joyA[4],joyA[0],joyA[1],joyA[2],joyA[3]}),
+	.JOYSTICK1		 (~{joyB[4],joyB[0],joyB[1],joyB[2],joyB[3]}),
 	.VIDBASECLK_O	 ( pixbaseclk_select ),
 	.VIDSYNCPOL_O	 ( )
 );
@@ -424,18 +438,19 @@ i2cSlaveTop CMOS
 	.sdaOut	(i2c_dout	 ),
 	.scl		(i2c_clock	 )
 );
-
+wire riscos_dl = (ioctl_index == 1) && ioctl_download;
+reg loader_stb = 0;
 always @(posedge clk_32m) begin 
-	if (loader_we) loader_stb <= 1'b1;
+	if (ioctl_wr) loader_stb <= 1'b1;
 		else if (ram_ack) loader_stb <= 1'b0;
 end
 
-assign ram_we		 = loader_active ? loader_active : core_we_o;
-assign ram_sel		 = loader_active ? loader_sel : core_sel_o;
-assign ram_address = loader_active ? {loader_addr[23:2],2'b00} : {core_address_out[23:2],2'b00};
-assign ram_stb		 = loader_active ? loader_stb : core_stb_out;
-assign ram_cyc		 = loader_active ? loader_stb : core_stb_out;
-assign ram_data_in = loader_active ? loader_data : core_data_out;
-assign core_ack_in = loader_active ? 1'b0 : ram_ack;
+assign ram_we		 = riscos_dl ? 1'b1 : core_we_o;
+assign ram_sel		 = riscos_dl ? (ioctl_addr[1] ? 4'b1100 : 4'b0011) : core_sel_o;
+assign ram_address = riscos_dl ? 25'h400000 + {ioctl_addr[23:2],2'b00} : {core_address_out[23:2],2'b00};
+assign ram_stb		 = riscos_dl ? loader_stb : core_stb_out;
+assign ram_cyc		 = riscos_dl ? loader_stb : core_stb_out;
+assign ram_data_in = riscos_dl ? {ioctl_dout,ioctl_dout} : core_data_out;
+assign core_ack_in = riscos_dl ? 1'b0 : ram_ack;
 
 endmodule

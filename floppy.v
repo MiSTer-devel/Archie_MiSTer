@@ -105,12 +105,12 @@ always @(posedge clk) begin
       // rising edge of step signal starts step
       if(step_in && !step_inD) begin
 	 if(current_track != 0) current_track <= current_track - 7'd1;
-	 step_busy <= STEP_BUSY_CLKS;
+	 step_busy <= STEP_BUSY_CLKS[19:0];
       end
 
       if(step_out && !step_outD) begin
 	 if(current_track != TRACKS-1) current_track <= current_track + 7'd1;
-	 step_busy <= STEP_BUSY_CLKS;
+	 step_busy <= STEP_BUSY_CLKS[19:0];
       end
    end
 end
@@ -130,16 +130,16 @@ localparam SECTOR_STATE_HDR  = 2'd1;
 localparam SECTOR_STATE_DATA = 2'd2;
 
 // we simulate an interleave of 1
-reg [3:0] start_sector = SECTOR_BASE;
+reg [3:0] start_sector = SECTOR_BASE[3:0];
    
 reg [1:0] sec_state;
 reg [9:0] sec_byte_cnt;  // counting bytes within sectors
-reg [3:0] current_sector = SECTOR_BASE;
+reg [3:0] current_sector = SECTOR_BASE[3:0];
   
 always @(posedge clk) begin
 	if (byte_clk_en) begin
    if(index_pulse_start) begin
-      sec_byte_cnt <= SECTOR_GAP_LEN-1;
+      sec_byte_cnt <= SECTOR_GAP_LEN[9:0]-1'd1;
       sec_state <= SECTOR_STATE_GAP;     // track starts with gap
       current_sector <= start_sector;    // track starts with sector 1
    end else begin
@@ -147,19 +147,19 @@ always @(posedge clk) begin
 	 case(sec_state)
 	   SECTOR_STATE_GAP: begin
 	      sec_state <= SECTOR_STATE_HDR;
-	      sec_byte_cnt <= SECTOR_HDR_LEN-1;
+	      sec_byte_cnt <= SECTOR_HDR_LEN[9:0]-1'd1;
 	   end
 	   
 	   SECTOR_STATE_HDR: begin
 	      sec_state <= SECTOR_STATE_DATA;
-	      sec_byte_cnt <= SECTOR_LEN-1;
+	      sec_byte_cnt <= SECTOR_LEN[9:0]-1'd1;
 	   end
 	   
 	   SECTOR_STATE_DATA: begin
 	      sec_state <= SECTOR_STATE_GAP;
-	      sec_byte_cnt <= SECTOR_GAP_LEN-1;
+	      sec_byte_cnt <= SECTOR_GAP_LEN[9:0]-1'd1;
 	      if(current_sector == SECTOR_BASE+SPT-1) 
-		current_sector <= SECTOR_BASE;
+				current_sector <= SECTOR_BASE[3:0];
 	      else
  	        current_sector <= sector + 4'd1;
 	   end
@@ -191,7 +191,7 @@ always @(posedge clk) begin
 			byte_cnt <= 0;
 			index_pulse_start <= 1'b1;
 		end else
-			byte_cnt <= byte_cnt + 1;
+			byte_cnt <= byte_cnt + 1'd1;
 	end
 end
 
@@ -203,7 +203,7 @@ reg [2:0] clk_cnt2;
 always @(posedge clk) begin
 	byte_clk_en <= 0;
 	if (data_clk_en) begin
-		clk_cnt2 <= clk_cnt2 + 1;
+		clk_cnt2 <= clk_cnt2 + 1'd1;
 		if (clk_cnt2 == 3'b011) byte_clk_en <= 1;
 	end
 end

@@ -44,48 +44,44 @@
 ////                                                              ////
 //////////////////////////////////////////////////////////////////////
 //
-`include "i2cSlave_define.v"
 
-
-module registerInterface (
- input 	      clk,
- input [7:0]  addr,
- input [7:0]  dataIn,
- input 	      writeEn,
- output reg [7:0] dataOut
+module registerInterface
+(
+	input 	    clk,
+	input  [7:0] addr,
+	input  [7:0] dataIn,
+	input 	    writeEn,
+	output reg [7:0] dataOut,
+	input [64:0] RTC
 );
 
-   localparam MEM_DEPTH = 256;
-   
-   
-reg [7:0] 	  memory[0:MEM_DEPTH-1];
+wire [7:0] mem_out;
+spram #(8,8,"cmos.mif","CMOS") memory
+(
+	.clock(clk),
+	.address(addr),
+	.data(dataIn),
+	.wren(writeEn),
+	.q(mem_out)
+);
 
-integer 	  i;
-   
-initial begin
+wire [7:0] year = {3'b000,RTC[47:44],1'b0} + {RTC[47:44],3'b000} + RTC[43:40];
 
-   $readmemh("cmos.mif", memory);
-   
-end
-   
 // --- I2C Read
-always @(posedge clk) begin
+always @(*) begin
   casex (addr)
-    8'h02: dataOut <= 8'h33; // sec
-    8'h03: dataOut <= 8'h33; // mins
-    8'h04: dataOut <= 8'h11; // hour
-    8'h05: dataOut <= 8'he9; // year
-    8'h06: dataOut <= 8'h81; // month/week
-    8'h0x: dataOut <= 8'h00; // everything else < 16
-    default: dataOut <= memory[addr];
+    8'h02: dataOut = RTC[7:0];   // secs
+    8'h03: dataOut = RTC[15:8];  // mins
+    8'h04: dataOut = RTC[23:16]; // hour
+    8'h05: dataOut = {year[1:0],RTC[29:24]}; // date
+    8'h06: dataOut = {RTC[50:48],RTC[36:32]}; // weekday/month
+	 8'hC0: dataOut = year;
+	 8'hC1: dataOut = 20;
+    8'b0000000X,
+    8'b00000111,
+    8'b00001XXX: dataOut = 0;
+    default: dataOut = mem_out;
   endcase
-end
-
-// --- I2C Write
-always @(posedge clk) begin
-  if (writeEn == 1'b1) begin
-     memory[addr] <= dataIn;
-  end
 end
 
 endmodule

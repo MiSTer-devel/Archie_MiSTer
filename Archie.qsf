@@ -373,7 +373,6 @@ set_global_assignment -name VERILOG_FILE vidc_audio.v
 set_global_assignment -name VERILOG_FILE vidc_dmachannel.v
 set_global_assignment -name VERILOG_FILE serialInterface.v
 set_global_assignment -name VERILOG_FILE registerInterface.v
-set_global_assignment -name VERILOG_FILE i2cSlaveTop.v
 set_global_assignment -name VERILOG_FILE i2cSlave.v
 set_global_assignment -name VERILOG_FILE ioc_irq.v
 set_global_assignment -name VERILOG_FILE ioc.v

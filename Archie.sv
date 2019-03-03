@@ -249,6 +249,8 @@ wire        kbd_out_strobe;
 wire  [7:0] kbd_in_data;
 wire        kbd_in_strobe;
 
+wire [64:0] RTC;
+
 wire        ioctl_download;
 wire  [7:0] ioctl_index;
 wire        ioctl_wr;
@@ -279,6 +281,8 @@ hps_io #(.STRLEN($size(CONF_STR)>>3), .WIDE(1), .VDNUM(2)) hps_io
 
 	.buttons(buttons),
 	.status(status),
+	
+	.RTC(RTC),
 
 	.kbd_out_data(kbd_out_data),
 	.kbd_out_strobe(kbd_out_strobe),
@@ -430,19 +434,42 @@ sdram_top SDRAM
 	.sd_ready	(ram_ready   )
 );
 
-i2cSlaveTop CMOS
+i2cSlave CMOS
 (
 	.clk		(clk_32m	 ),
 	.rst		(~pll_ready ),
 	.sdaIn	(i2c_din	 ),
 	.sdaOut	(i2c_dout	 ),
-	.scl		(i2c_clock	 )
+	.scl		(i2c_clock	 ),
+
+	.RTC     (RTC),
+	
+	.dl_addr(cmos_dl_addr),
+	.dl_data(cmos_dl_addr[0] ? ioctl_dout[15:8] : ioctl_dout[7:0]),
+	.dl_wr(|cmos_dl_wr),
+	.dl_en(cmos_dl)
 );
+
 wire riscos_dl = (ioctl_index == 1) && ioctl_download;
+wire cmos_dl   = (ioctl_index == 3) && ioctl_download;
+
+wire [7:0] cmos_dl_addr;
+wire [1:0] cmos_dl_wr;
+
 reg loader_stb = 0;
 always @(posedge clk_32m) begin 
-	if (ioctl_wr) loader_stb <= 1'b1;
-		else if (ram_ack) loader_stb <= 1'b0;
+	if (ram_ack) loader_stb <= 0;
+	if(riscos_dl & ioctl_wr) loader_stb <= 1;
+
+	cmos_dl_addr <= cmos_dl_addr + 1'd1;
+	cmos_dl_wr <= {cmos_dl_wr[0],1'b0};
+
+	if(cmos_dl) begin
+		if(ioctl_wr) begin
+			cmos_dl_addr <= ioctl_addr[7:0];
+			cmos_dl_wr <= 1;
+		end
+	end
 end
 
 assign ram_we		 = riscos_dl ? 1'b1 : core_we_o;

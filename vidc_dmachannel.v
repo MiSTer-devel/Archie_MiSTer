@@ -56,7 +56,7 @@ localparam HALF_FULL = 1<<(WORD_WIDTH-1);
 
 reg [1:0]	dma_count	= 2'd0;
 reg			load	= 	1'b0;
-reg			ak_r	=	1'b0;
+//reg			ak_r	=	1'b0;
 
 // each channel has a fifo of a different size. 
 wire [WORD_WIDTH-1:0]	wr_ptr;
@@ -93,10 +93,11 @@ vidc_fifo #(.FIFO_SIZE(FIFO_SIZE)) VIDEO_FIFO(
 // DMA interface control
 // this is in the cpu clock domain. 
 always @(posedge clkcpu) begin
-
-	ak_r	<=	ak;
-
-	if (rst == 1'b1) begin
+	reg rstD, rstD2;
+	//ak_r	<=	ak;
+	rstD <= rst;
+	rstD2 <= rstD;
+	if (rstD2 == 1'b1) begin
 	
 		// do reset logic 
 		dma_count 	<= 2'd0;	

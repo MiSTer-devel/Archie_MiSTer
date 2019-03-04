@@ -39,6 +39,7 @@
 // from http://www.opencores.org/lgpl.shtml                     //
 //                                                              //
 //////////////////////////////////////////////////////////////////
+// altera message_off 10935
 
 module a23_decode
 (

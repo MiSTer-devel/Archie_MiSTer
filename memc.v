@@ -395,7 +395,7 @@ assign mem_addr_o = 	vid_load		? {5'd0, vid_address[18:2]}	:
 
 
 // does this cpu cycle need to go to external RAM/ROM?
-assign cpu_ram_cycle = cpu_cyc & cpu_stb & (table_valid | phycs | romcs); 
+//assign cpu_ram_cycle = cpu_cyc & cpu_stb & (table_valid | phycs | romcs); 
 							
 assign mem_cyc_o  = cpu_load ? cpu_cyc 		: dma_in_progress;
 assign mem_stb_o  = cpu_load ? cpu_stb 		: dma_in_progress;
@@ -428,6 +428,6 @@ assign sndak 		= cpu_load ? 1'b0 : sound_dma_ip & mem_ack_i;
 assign sirq_n		= snd_next_valid;
 assign ram_cs		= table_valid | phycs | romcs;
 
-wire   mem_virtual= table_valid & ~cpu_address[25]; 
+//wire   mem_virtual= table_valid & ~cpu_address[25]; 
 
 endmodule

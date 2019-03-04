@@ -58,7 +58,7 @@ module latches(
 
 );
 
-reg [7:0]	printer_data;
+//reg [7:0]	printer_data;
 reg [7:0]	ext_latch_a;
 reg [7:0]	ext_latch_b;
 reg [7:0]	ext_latch_c;
@@ -67,7 +67,7 @@ wire write_request = wb_stb & wb_cyc & wb_we;
 
 initial begin 
 
-	printer_data 	= 8'd0;
+	//printer_data 	= 8'd0;
 	ext_latch_a 	= 8'hFF;
 	ext_latch_b 	= 8'hFF;
 	ext_latch_c 	= 8'd0; // A540 only. Used for VIDC enhancer.
@@ -80,7 +80,7 @@ always @(posedge clkcpu) begin
 	
 		case (wb_adr)  
 			
-			14'h0004: printer_data<= wb_dat_i; // 0x10
+			//14'h0004: printer_data<= wb_dat_i; // 0x10
 			14'h0010: ext_latch_a <= wb_dat_i; // 0x40
 			14'h0006: ext_latch_b <= wb_dat_i; // 0x18
 			14'h0012: ext_latch_c <= wb_dat_i; // 0x48
@@ -99,7 +99,7 @@ assign floppy_density = ext_latch_b[1];
 assign floppy_reset = ext_latch_b[3];
 
 assign wb_dat_o	= 	wb_adr == 14'h001e ? {3'b011, joy0} :
-							wb_adr == 14'h001f ? {3'b011, joy1} : 32'hFFFFFFFF;
+							wb_adr == 14'h001f ? {3'b011, joy1} : 8'hFF;
 
 assign baseclk = ext_latch_c[1:0];
 assign syncpol = ext_latch_c[3:2];

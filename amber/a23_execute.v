@@ -175,7 +175,6 @@ wire                execute;           // high when condition execution is true
 wire [31:0]         reg_write_nxt;
 wire                pc_wen;
 wire [14:0]         reg_bank_wen;
-wire [3:0]          reg_bank_wsel;
 wire [31:0]         multiply_out;
 wire [1:0]          multiply_flags;
 reg  [31:0]         base_address = 'd0;    // Saves base address during LDM instruction in 
@@ -408,7 +407,6 @@ assign pc_wen       = i_pc_wen || !execute;
 // only update register bank if current instruction executes
 assign reg_bank_wen = {{15{execute}} & i_reg_bank_wen};
 
-assign reg_bank_wsel = {{4{~execute}} | i_reg_bank_wsel};
 
 
 // ========================================================
@@ -574,7 +572,7 @@ a23_ram_register_bank u_register_bank(
     .i_rds_sel               ( i_rds_sel_nxt             ),
     .i_rn_sel                ( i_rn_sel_nxt              ),
     .i_pc_wen                ( pc_wen                    ),
-    .i_reg_bank_wsel         ( reg_bank_wsel             ),
+    .i_reg_bank_wsel         ( {{4{~execute}} | i_reg_bank_wsel} ),
     .i_pc                    ( pc_nxt[25:2]              ),
     .i_reg                   ( reg_write_nxt             ),
 

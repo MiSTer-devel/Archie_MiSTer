@@ -221,7 +221,7 @@ assign addr_o = pgentry[0].en ? pgentry[0].addr :
 		pgentry[124].en ? pgentry[124].addr : 
 		pgentry[125].en ? pgentry[125].addr : 
 		pgentry[126].en ? pgentry[126].addr : 
-		pgentry[127].en ? pgentry[127].addr : 26'hZZZZZZZ;
+		pgentry[127].en ? pgentry[127].addr : 26'd0;
 
 assign valid = 	pgentry[0].en | pgentry[1].en | pgentry[2].en | pgentry[3].en | pgentry[4].en | pgentry[5].en | pgentry[6].en | pgentry[7].en | 
 				pgentry[8].en | pgentry[9].en | pgentry[10].en | pgentry[11].en | pgentry[12].en | pgentry[13].en | pgentry[14].en | pgentry[15].en | 

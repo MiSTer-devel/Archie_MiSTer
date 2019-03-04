@@ -22,8 +22,11 @@ derive_clock_uncertainty
 set_input_delay -max -clock SDRAM_CLK 6.4ns [get_ports SDRAM_DQ[*]]
 set_input_delay -min -clock SDRAM_CLK 3.7ns [get_ports SDRAM_DQ[*]]
 
-set_multicycle_path -from {*|vidc:VIDC|*} -to [get_clocks {*|pll|pll_inst|altera_pll_i|general[3].gpll~PLL_OUTPUT_COUNTER|divclk}] -setup 2
-set_multicycle_path -from {*|vidc:VIDC|*} -to [get_clocks {*|pll|pll_inst|altera_pll_i|general[3].gpll~PLL_OUTPUT_COUNTER|divclk}] -hold 2
+set_multicycle_path -from [get_clocks {*|vpll|vpll_inst|altera_pll_i|cyclonev_pll|counter[0].output_counter|divclk}] -to {*|vidc:VIDC|*} -setup 2
+set_multicycle_path -from [get_clocks {*|vpll|vpll_inst|altera_pll_i|cyclonev_pll|counter[0].output_counter|divclk}] -to {*|vidc:VIDC|*} -hold 2
+
+set_multicycle_path -from [get_clocks {*|pll|pll_inst|altera_pll_i|general[0].gpll~PLL_OUTPUT_COUNTER|divclk}] -to [get_clocks {*|vpll|vpll_inst|altera_pll_i|cyclonev_pll|counter[0].output_counter|divclk}] -setup 4
+set_multicycle_path -from [get_clocks {*|pll|pll_inst|altera_pll_i|general[0].gpll~PLL_OUTPUT_COUNTER|divclk}] -to [get_clocks {*|vpll|vpll_inst|altera_pll_i|cyclonev_pll|counter[0].output_counter|divclk}] -hold 3
 
 set_output_delay -max -clock SDRAM_CLK 1.6ns [get_ports {SDRAM_D* SDRAM_A* SDRAM_BA* SDRAM_n* SDRAM_CKE}]
 set_output_delay -min -clock SDRAM_CLK -0.9ns [get_ports {SDRAM_D* SDRAM_A* SDRAM_BA* SDRAM_n* SDRAM_CKE}]
@@ -31,10 +34,10 @@ set_output_delay -min -clock SDRAM_CLK -0.9ns [get_ports {SDRAM_D* SDRAM_A* SDRA
 # Decouple different clock groups (to simplify routing)
 set_clock_groups -asynchronous \
    -group [get_clocks { *|pll|pll_inst|altera_pll_i|general[*].gpll~PLL_OUTPUT_COUNTER|divclk}] \
-   -group [get_clocks { pll_hdmi|pll_hdmi_inst|altera_pll_i|cyclonev_pll|counter[0].output_counter|divclk VID_CLK}] \
+   -group [get_clocks { *|vpll|vpll_inst|altera_pll_i|cyclonev_pll|counter[*].output_counter|divclk}] \
+   -group [get_clocks { pll_hdmi|pll_hdmi_inst|altera_pll_i|cyclonev_pll|counter[0].output_counter|divclk}] \
    -group [get_clocks { *|h2f_user0_clk}] \
    -group [get_clocks { FPGA_CLK1_50 FPGA_CLK2_50 FPGA_CLK3_50}]
-
 
 set_output_delay -max -clock HDMI_CLK 2.0ns [get_ports {HDMI_TX_D[*] HDMI_TX_DE HDMI_TX_HS HDMI_TX_VS}]
 set_output_delay -min -clock HDMI_CLK -1.5ns [get_ports {HDMI_TX_D[*] HDMI_TX_DE HDMI_TX_HS HDMI_TX_VS}]

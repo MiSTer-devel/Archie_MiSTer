@@ -69,8 +69,7 @@ module ioc(
 		input            kbd_in_strobe
 );
 
-reg [3:0] 	clk2m_count;
-reg [1:0] 	clk8m_count;
+reg [4:0]   clken_counter;
 
 wire [7:0]	irqa_dout, irqb_dout, firq_dout;
 wire			irqa_req, irqb_req, firq_req;
@@ -85,23 +84,17 @@ wire		serial_selected = wb_adr[6:2] == 5'd1 /* synthesis keep */;
 wire write_request 	= (wb_bank == 3'b000) & wb_stb & wb_cyc & wb_we;
 wire read_request 	= (wb_bank == 3'b000) & wb_stb & wb_cyc & !wb_we;
 
-// input data irq is cleared when cpu reads input port
-reg kbd_in_irq_ack;
-reg kbd_in_irq = 0;
-
-// keyboard input is valid on kbd_in_strobe. Latch data then
+// keyboard input is valid on rising edge of kbd_in_strobe. Latch data then
 // and set irq
 reg [7:0] kbd_in_data_latch;
-
-always @(posedge clkcpu) begin
-	reg old_ack;
-	
-	old_ack <= kbd_in_irq_ack;
-	if(kbd_in_strobe) begin
+reg kbd_in_irq_ack;
+reg kbd_in_irq;
+// input data irq is cleared when cpu reads input port
+always @(posedge clkcpu or posedge kbd_in_irq_ack) begin
+	if (kbd_in_irq_ack) kbd_in_irq <= 0;
+	else if (kbd_in_strobe) begin
 		kbd_in_data_latch <= kbd_in_data;
 		kbd_in_irq <= 1;
-	end else if(~old_ack & kbd_in_irq_ack) begin
-		kbd_in_irq <= 0;
 	end
 end
 
@@ -235,9 +228,6 @@ initial begin
 
 	ctrl_state = 6'h3F;
 
-	clk8m_count = 'd0;
-	clk2m_count = 'd0;
-
 	ir_r = 1'b1;
 	
 end
@@ -259,10 +249,10 @@ always @(posedge clkcpu) begin
 		
 	end
 
-	// increment the clock counters.
-	clk2m_count <= clk2m_count + 1'd1;
-	clk8m_count <= clk8m_count + 1'd1;
-	
+	// increment the clock counter. 42 MHz clkcpu assumed.
+	clken_counter <= clken_counter + 1'd1;
+	if (clken_counter == 20) clken_counter <= 0;
+
 	if (write_request & ctrl_selected) begin 
 	
 		ctrl_state <= wb_dat_i[5:0];
@@ -294,9 +284,8 @@ assign ctrl_dout = { ir, 1'b1, c_in & c_out };
 
 assign ir_edge = ~ir_r & ir;
 
-// pulse the 2mhz & 8mhz clock enable line high when all the bits are set. 
-assign clk2m_en = &clk2m_count;
-assign clk8m_en = &clk8m_count;
+assign clk2m_en = !clken_counter;
+assign clk8m_en = clken_counter == 0 || clken_counter == 5 || clken_counter == 10 || clken_counter == 15;
 
 assign wb_dat_o = 	read_request ?
 					(ctrl_selected ?  ctrl_dout :

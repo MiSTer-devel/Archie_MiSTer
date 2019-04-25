@@ -61,7 +61,7 @@ module fdc1772 (
 		input            sd_buff_wr
 );
 
-localparam CLK = 32000000;
+localparam CLK = 42000000;
 localparam CLK_EN = 8000000;
 
 // -------------------------------------------------------------------------

@@ -221,15 +221,15 @@ end
 
 
 wire pll_ready;
-wire clk_128m;
-wire clk_32m;
+wire clk_mem;
+wire clk_sys;
 
 pll pll
 (
 	.refclk(CLK_50M),
-	.outclk_0(clk_128m),
+	.outclk_0(clk_mem),
 	.outclk_1(SDRAM_CLK),
-	.outclk_2(clk_32m),
+	.outclk_2(clk_sys),
 	.locked(pll_ready)
 );
 
@@ -271,7 +271,7 @@ wire        img_readonly;
 
 hps_io #(.STRLEN($size(CONF_STR)>>3), .WIDE(1), .VDNUM(2)) hps_io
 (
-	.clk_sys(clk_32m),
+	.clk_sys(clk_sys),
 	.HPS_BUS(HPS_BUS),
 
 	.conf_str(CONF_STR),
@@ -339,7 +339,7 @@ wire 			i2c_din, i2c_dout, i2c_clock;
 
 archimedes_top ARCHIMEDES
 (
-	.CLKCPU_I	( clk_32m			),
+	.CLKCPU_I	( clk_sys			),
 	.CLKPIX_I	( CLK_VIDEO			),
 	.CEPIX_O	 	( CE_PIXEL			),
 
@@ -406,7 +406,7 @@ wire			ram_ready;
 sdram SDRAM
 (
 	// wishbone interface
-	.wb_clk		(clk_32m		 ),
+	.wb_clk		(clk_sys		 ),
 	.wb_stb		(ram_stb		 ),
 	.wb_cyc		(ram_cyc		 ),
 	.wb_we		(ram_we		 ),
@@ -419,7 +419,7 @@ sdram SDRAM
 	.wb_cti		(core_cti_o	 ),
 
 	// SDRAM Interface
-	.sd_clk		(clk_128m	 ),
+	.sd_clk		(clk_mem	 ),
 	.sd_rst		(~pll_ready	 ),
 
 	.sd_cke		(SDRAM_CKE	 ),
@@ -436,7 +436,7 @@ sdram SDRAM
 
 i2cSlave CMOS
 (
-	.clk		(clk_32m	 ),
+	.clk		(clk_sys	 ),
 	.rst		(~pll_ready ),
 	.sdaIn	(i2c_din	 ),
 	.sdaOut	(i2c_dout	 ),
@@ -457,7 +457,7 @@ wire [7:0] cmos_dl_addr;
 wire [1:0] cmos_dl_wr;
 
 reg loader_stb = 0;
-always @(posedge clk_32m) begin 
+always @(posedge clk_sys) begin 
 	if (ram_ack) loader_stb <= 0;
 	if(riscos_dl & ioctl_wr) loader_stb <= 1;
 

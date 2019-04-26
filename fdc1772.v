@@ -22,7 +22,8 @@
 // - 30ms settle time after step before data can be read
 // - some parts are hard coded for archie floppy format (not dos)
 
-module fdc1772 (
+module fdc1772 #(parameter CLK)
+(
 		input 	        clkcpu, // system cpu clock.
 		input 	        clk8m_en,
 
@@ -61,7 +62,6 @@ module fdc1772 (
 		input            sd_buff_wr
 );
 
-localparam CLK = 42000000;
 localparam CLK_EN = 8000000;
 
 // -------------------------------------------------------------------------

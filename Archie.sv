@@ -222,7 +222,7 @@ hps_io #(.STRLEN($size(CONF_STR)>>3), .WIDE(1), .VDNUM(2)) hps_io
 	.img_readonly(img_readonly)
 );
 
-assign AUDIO_S = 0;
+assign AUDIO_S = 1;
 assign AUDIO_MIX = status[3:2];
 
 wire [3:0]	core_r, core_g, core_b;
@@ -259,12 +259,14 @@ always @(posedge clk_sys) if(ioctl_download) initReset_n <= 1;
 
 wire [1:0] selpix;
 
-archimedes_top ARCHIMEDES
+archimedes_top #(CLKSYS) ARCHIMEDES
 (
 	.CLKCPU_I	( clk_sys			),
 	.CLKPIX_I	( CLK_VIDEO			),
 	.CEPIX_I	 	( CE_PIXEL			),
 	.SELPIX_O	( selpix				), 
+
+	.CEAUD_I	 	( ceaud  			),
 
 	.RESET_I	   (~ram_ready | reset),
 
@@ -321,7 +323,7 @@ archimedes_top ARCHIMEDES
 wire [31:0] vratio[16] = 
 '{
 	8000000, 12000000, 16000000, 24000000,
-	8333333, 12666666, 16666666, 25000000,
+	8391666, 12587500, 16783333, 25175000,
 	1200000, 18000000, 24000000, 36000000,
 	8000000, 12000000, 16000000, 24000000
 };
@@ -376,6 +378,30 @@ always @(posedge CLK_VIDEO) begin
 	old_mode <= {status[4], vmode};
 	if(old_mode != {status[4], vmode}) new_vmode <= ~new_vmode;
 end
+
+
+wire [31:0] aratio[4] = 
+'{
+	1000000, 1048958, 1500000, 1000000
+};
+
+reg         ceaud;
+reg  [31:0] asum, aclk;
+wire [31:0] asum_next = asum + aclk;
+always @(posedge CLK_VIDEO) begin
+	reg [31:0] aclk1;
+
+	aclk1 <= (status[5] && pixbaseclk_select == 1) ? 1000000 : aratio[pixbaseclk_select];
+	aclk <= aclk1;
+
+	ceaud <= 0;
+	asum <= asum_next;
+	if(asum_next >= CLKSYS) begin
+		asum <= asum_next - CLKSYS;
+		ceaud <= 1;
+	end
+end
+
 
 
 wire			ram_ack;

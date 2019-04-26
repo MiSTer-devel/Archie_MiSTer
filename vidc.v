@@ -26,14 +26,14 @@
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
-module vidc
+module vidc #(parameter CLKCPU)
 (
 	input 	 	  clkcpu, // cpu bus clock domain
 
 	input 		  clkpix,
 	input         cepix,
 	output  [1:0] selpix,
-
+	
 	// "wishbone" interface
 	input 	 	  rst_i,
 	input			  vidw, 	// write to a register.		
@@ -58,8 +58,11 @@ module vidc
 	output  [3:0] video_b,
 	output		  video_en,
 
+	input         ceaud,
+
 	output [15:0] audio_l,
-	output [15:0] audio_r
+	output [15:0] audio_r,
+	output reg    audio_sync
 );
 
 wire cur_enabled;
@@ -75,7 +78,7 @@ reg [12:0]		cur_palette[1:3]; 	// border register.
 
 // audio clock domain signals
 wire [7:0] 		snd_sam_data;
-wire			snd_sam_en;
+wire			   snd_sam_en;
 
 // pixel clock domain signals
 //delayed enable.
@@ -166,13 +169,22 @@ vidc_dmachannel #(.FIFO_SIZE(2)) CURSORDMA (
 
 );
 
+
+always @(posedge clkcpu) begin
+	reg old_en;
+	
+	old_en <= snd_sam_en;
+	audio_sync <= ~old_en & snd_sam_en;
+end
+
+
 // this module does the math for a DMA channel
 vidc_dmachannel SOUNDDMA (
 
-	.rst			( rst_i			),
+	.rst			( rst_i		),
 	.clkcpu		( clkcpu		),
 	.clkdev		( clkpix		),
-	.cedev		( cepix		),
+	.cedev		( ceaud		),
 	
 	.cpu_data	( viddat		),
 	.ak			( sndak			),
@@ -193,7 +205,7 @@ vidc_audio AUDIOMIXER(
     .cpu_data   ( cpu_dat   ),
     
     .aud_clk    ( clkpix    ),
-    .aud_ce     ( cepix     ),
+    .aud_ce     ( ceaud     ),
     .aud_rst    ( rst_i     ),
     .aud_data   ( snd_sam_data ),
     .aud_en     ( snd_sam_en ),

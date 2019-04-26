@@ -19,7 +19,8 @@
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 //
 
-module archimedes_top(
+module archimedes_top #(parameter CLKCPU)
+(
 
 	// base CPU Clock
 	input 			CLKCPU_I,
@@ -27,6 +28,8 @@ module archimedes_top(
 	input				CLKPIX_I,
 	input				CEPIX_I,
 	output   [1:0] SELPIX_O,
+	
+	input				CEAUD_I,
 
 	input 			RESET_I, 
 	
@@ -201,12 +204,13 @@ memc MEMC(
 	.sirq_n			( sirq_n			)
 );
 
-vidc VIDC(
-
+vidc #(CLKCPU) VIDC
+(
 	.clkpix    ( CLKPIX_I  ),
 	.cepix     ( CEPIX_I   ),
 	.selpix    ( SELPIX_O  ),
 
+	.ceaud     ( CEAUD_I   ),
 
 	.clkcpu    ( CLKCPU_I  ),  
 	.rst_i     ( RESET_I   ),
@@ -320,7 +324,7 @@ wire 		  	floppy_inuse;
 wire 		  	floppy_density;
 wire 		  	floppy_reset;
 
-fdc1772 FDC1772
+fdc1772 #(CLKCPU) FDC1772
 (
 	.clkcpu			( CLKCPU_I				),
 	.clk8m_en		( ioc_clk8m_en			),

@@ -137,89 +137,6 @@ localparam CONF_STR = {
 
 ////////////////////   CLOCKS   ///////////////////
 
-/*
-	24, 16,   12,   8
-	25, 16.6, 12.6, 8.3
-	36, 24,   18,   12
-	24, 16,   12,   8
-*/
-
-vpll vpll
-(
-	.refclk(CLK_50M),
-	.rst(reset),
-	.reconfig_to_pll(reconfig_to_pll),
-	.reconfig_from_pll(reconfig_from_pll),
-	.outclk_0(CLK_VIDEO)
-);
-
-wire [63:0] reconfig_to_pll;
-wire [63:0] reconfig_from_pll;
-wire        cfg_waitrequest;
-reg         cfg_write;
-reg   [5:0] cfg_address;
-reg  [31:0] cfg_writedata;
-
-altera_pll_reconfig_top #(
-	.device_family       ("Cyclone V"),
-	.ENABLE_MIF          (1),
-	.MIF_FILE_NAME       ("vpll_conf.mif"),
-	.ENABLE_BYTEENABLE   (0),
-	.BYTEENABLE_WIDTH    (4),
-	.RECONFIG_ADDR_WIDTH (6),
-	.RECONFIG_DATA_WIDTH (32),
-	.reconf_width        (64),
-	.WAIT_FOR_LOCK       (1)
-) vpll_cfg (
-	.mgmt_reset        (reset),
-	.mgmt_clk          (CLK_50M),
-	.mgmt_write        (cfg_write),
-	.mgmt_address      (cfg_address),
-	.mgmt_writedata    (cfg_writedata),
-	.mgmt_waitrequest  (cfg_waitrequest),
-	.reconfig_to_pll   (reconfig_to_pll),
-	.reconfig_from_pll (reconfig_from_pll)
-);
-
-always @(posedge CLK_50M) begin
-	reg [2:0] cfg_state = 0;
-	reg       cfg_start = 0;
-	reg [1:0] cfg_cur;
-
-	if(reset) cfg_start <= 1;
-	else begin
-		cfg_cur <= pixbaseclk_select;
-		if(cfg_cur != pixbaseclk_select) cfg_start = 1;
-	
-		if(!cfg_waitrequest) begin
-			cfg_write <= 0;
-			case(cfg_state)
-				0: if(cfg_start) begin
-						cfg_cur <= pixbaseclk_select;
-						cfg_start <= 0;
-						cfg_state <= cfg_state + 1'd1;
-					end
-				1: begin
-						cfg_address <= 31;
-						cfg_writedata <= {cfg_cur,6'b000000};
-						cfg_write <= 1;
-						cfg_state <= cfg_state + 1'd1;
-					end
-				2: cfg_state <= cfg_state + 1'd1;
-				3: begin
-						cfg_address <= 2;
-						cfg_writedata <= 0;
-						cfg_write <= 1;
-						cfg_state <= cfg_state + 1'd1;
-					end
-				4: cfg_state <= cfg_state + 1'd1;
-				5: cfg_state <= 0;
-			endcase
-		end
-	end
-end
-
-
 wire pll_ready;
 wire clk_mem;
 wire clk_sys;
@@ -232,11 +149,6 @@ pll pll
 	.outclk_2(clk_sys),
 	.locked(pll_ready)
 );
-
-wire reset = status[0] | buttons[1] | ~initReset_n;
-
-reg initReset_n = 0;
-always @(posedge clk_32m) if(ioctl_download) initReset_n <= 1;
 
 //////////////////   HPS I/O   ///////////////////
 wire [15:0] joyA;
@@ -281,6 +193,7 @@ hps_io #(.STRLEN($size(CONF_STR)>>3), .WIDE(1), .VDNUM(2)) hps_io
 
 	.buttons(buttons),
 	.status(status),
+	.new_vmode(new_vmode),
 	
 	.RTC(RTC),
 
@@ -315,6 +228,8 @@ assign AUDIO_MIX = status[3:2];
 wire [3:0]	core_r, core_g, core_b;
 wire			core_hs, core_vs;
 
+assign CLK_VIDEO = clk_sys;
+assign CE_PIXEL  = cepix;
 assign VGA_R  = {core_r,core_r};
 assign VGA_G  = {core_g,core_g};
 assign VGA_B  = {core_b,core_b};
@@ -337,13 +252,21 @@ wire	[1:0]	pixbaseclk_select;
 
 wire 			i2c_din, i2c_dout, i2c_clock;
 
+wire reset = status[0] | buttons[1] | ~initReset_n | ioctl_download;
+
+reg initReset_n = 0;
+always @(posedge clk_sys) if(ioctl_download) initReset_n <= 1;
+
+wire [1:0] selpix;
+
 archimedes_top ARCHIMEDES
 (
 	.CLKCPU_I	( clk_sys			),
 	.CLKPIX_I	( CLK_VIDEO			),
-	.CEPIX_O	 	( CE_PIXEL			),
+	.CEPIX_I	 	( CE_PIXEL			),
+	.SELPIX_O	( selpix				), 
 
-	.RESET_I	   (~ram_ready | ioctl_download | reset),
+	.RESET_I	   (~ram_ready | reset),
 
 	.MEM_ACK_I	( core_ack_in		),
 	.MEM_DAT_I	( core_data_in		),
@@ -394,6 +317,66 @@ archimedes_top ARCHIMEDES
 	.VIDBASECLK_O	 ( pixbaseclk_select ),
 	.VIDSYNCPOL_O	 ( )
 );
+
+wire [31:0] vratio[16] = 
+'{
+	8000000, 12000000, 16000000, 24000000,
+	8333333, 12666666, 16666666, 25000000,
+	1200000, 18000000, 24000000, 36000000,
+	8000000, 12000000, 16000000, 24000000
+};
+
+wire [3:0] vmode = {pixbaseclk_select,selpix};
+
+localparam  CLKSYS = 42000000;
+
+reg         cepix;
+reg  [31:0] vclk, vsum;
+wire [31:0] vsum_next = vsum + vclk;
+always @(posedge CLK_VIDEO) begin
+	cepix <= 0;
+	vsum <= vsum_next;
+	if(vsum_next >= CLKSYS) begin
+		vsum <= vsum_next - CLKSYS;
+		cepix <= 1;
+	end
+end
+
+always @(posedge CLK_VIDEO) begin
+	reg [31:0] pixcnt = 0, pix60;
+	reg old_sync = 0;
+	reg [31:0] vclk1;
+
+	reg allow60 = 0;
+
+	if(vmode == 7) allow60 <= 1;
+	if(reset) allow60 <= 0;
+
+	if(reset || status[4] || !allow60) vclk1 <= vratio[vmode];
+	else if(CE_PIXEL) begin
+		old_sync <= VGA_VS;
+		pixcnt <= pixcnt + 1;
+		if(~old_sync & VGA_VS) begin
+			pix60 <= {pixcnt[26:0],5'd0}+{pixcnt[27:0],4'd0}+{pixcnt[28:0],3'd0}+{pixcnt[29:0],2'd0};
+			pixcnt <= 0;
+		end
+		
+		if(pix60<5000000) vclk1 <= 5000000;
+		else if(pix60>CLKSYS) vclk1 <= CLKSYS;
+		else vclk1 <= pix60;
+	end
+
+	vclk <= vclk1;
+end
+
+reg new_vmode;
+always @(posedge CLK_VIDEO) begin
+	reg [4:0] old_mode;
+	
+	old_mode <= {status[4], vmode};
+	if(old_mode != {status[4], vmode}) new_vmode <= ~new_vmode;
+end
+
 
 wire			ram_ack;
 wire			ram_stb;

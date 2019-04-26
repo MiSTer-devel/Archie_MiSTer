@@ -31,7 +31,8 @@ module vidc
 	input 	 	  clkcpu, // cpu bus clock domain
 
 	input 		  clkpix,
-	output reg    cepix_hi,
+	input         cepix,
+	output  [1:0] selpix,
 
 	// "wishbone" interface
 	input 	 	  rst_i,
@@ -104,28 +105,7 @@ wire		snd_load;
 wire		currq_int;
 wire		vidrq_int;
 
-reg      cepix;
-
-always @(posedge clkpix) begin
-	reg [2:0] div6 = 0;
-	reg [1:0] div4 = 0;
-
-	div4 <= div4 + 1'd1;
-	div6 <= div6 + 1'd1;
-	if(div6 == 5) div6 <= 0;
-
-	case(vidc_cr[1:0])
-		0: cepix <= !div6;
-		1: cepix <= !div4;
-		2: cepix <= ((div6 == 0) || (div6 == 3));
-		3: cepix <= !div4[0];
-	endcase
-	
-	case(vidc_cr[0])
-		0: cepix_hi <= ((div6 == 0) || (div6 == 3));
-		1: cepix_hi <= !div4[0];
-	endcase
-end
+assign   selpix = vidc_cr[1:0];
 
 vidc_timing TIMING(
 	

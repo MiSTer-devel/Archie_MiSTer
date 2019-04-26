@@ -23,9 +23,11 @@ module archimedes_top(
 
 	// base CPU Clock
 	input 			CLKCPU_I,
+
 	input				CLKPIX_I,
-	output			CEPIX_O,
-	
+	input				CEPIX_I,
+	output   [1:0] SELPIX_O,
+
 	input 			RESET_I, 
 	
 	// cpu wishbone interface.
@@ -201,35 +203,37 @@ memc MEMC(
 
 vidc VIDC(
 
-	  .clkpix	( CLKPIX_I	),
-	  .cepix_hi	( CEPIX_O	),
+	.clkpix    ( CLKPIX_I  ),
+	.cepix     ( CEPIX_I   ),
+	.selpix    ( SELPIX_O  ),
 
-	  .clkcpu	( CLKCPU_I	),  
-	  .rst_i		( RESET_I),
-	  
-	  .cpu_dat	( cpu_dat_o	),
 
-	  // memc 
-	  .flybk		( vid_flybk	),
-	  .vidak		( vid_ack	),
-	  .vidrq		( vid_req	),
-	  .sndak		( snd_ack	),
-	  .sndrq		( snd_req	),
-	  
-	  .viddat	( MEM_DAT_I	),
-	  .vidw		( vid_we		),
-	
-	  // video signals
-	  .hsync		( HSYNC		),
-	  .vsync		( VSYNC		),
-	  .video_r	( VIDEO_R	),
-	  .video_g	( VIDEO_G	),
-	  .video_b	( VIDEO_B	),
-	  .video_en ( VIDEO_EN  ),
+	.clkcpu    ( CLKCPU_I  ),  
+	.rst_i     ( RESET_I   ),
 
-	  // audio signals
-	  .audio_l	( AUDIO_L	),
-	  .audio_r	( AUDIO_R	)
+	.cpu_dat   ( cpu_dat_o ),
+
+	// memc 
+	.flybk     ( vid_flybk ),
+	.vidak     ( vid_ack   ),
+	.vidrq     ( vid_req   ),
+	.sndak     ( snd_ack   ),
+	.sndrq     ( snd_req   ),
+
+	.viddat    ( MEM_DAT_I ),
+	.vidw      ( vid_we    ),
+
+	// video signals
+	.hsync     ( HSYNC     ),
+	.vsync     ( VSYNC     ),
+	.video_r   ( VIDEO_R	  ),
+	.video_g   ( VIDEO_G	  ),
+	.video_b   ( VIDEO_B	  ),
+	.video_en  ( VIDEO_EN  ),
+
+	// audio signals
+	.audio_l   ( AUDIO_L   ),
+	.audio_r   ( AUDIO_R   )
 );
 
 wire [1:0]	ioc_speed = cpu_address[20:19];

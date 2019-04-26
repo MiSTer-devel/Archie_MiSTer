@@ -200,7 +200,7 @@ wire dvi_mode  = cfg[7];
 wire audio_96k = cfg[6];
 wire ypbpr_en  = cfg[5];
 wire csync     = cfg[3];
-wire vga_scaler= cfg[2];
+wire vga_scaler= 1; //cfg[2];
 
 reg        cfg_custom_t = 0;
 reg  [5:0] cfg_custom_p1;

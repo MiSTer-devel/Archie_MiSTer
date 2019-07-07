@@ -31,10 +31,10 @@ module sdram
 	input            sd_clk,		// sdram is accessed at 128MHz
 	input            sd_rst,		// reset the sdram controller.
 	output           sd_cke,		// clock enable.
-	inout  reg[15:0]sd_dq,		// 16 bit bidirectional data bus
-	output reg[12:0]sd_addr,	// 13 bit multiplexed address bus
-	output reg[1:0]	sd_dqm = 2'b00,		// two byte masks
-	output reg[1:0]	sd_ba = 2'b00,		// two banks
+	inout  reg[15:0] sd_dq,		// 16 bit bidirectional data bus
+	output reg[12:0] sd_addr,	// 13 bit multiplexed address bus
+	output    [1:0]  sd_dqm = 2'b00,		// two byte masks
+	output reg[1:0]  sd_ba = 2'b00,		// two banks
 	output           sd_cs_n,	// a single chip select
 	output           sd_we_n,	// write enable
 	output           sd_ras_n,	// row address select
@@ -45,7 +45,7 @@ module sdram
 
 	input            wb_clk,     // 32MHz chipset clock to which sdram state machine is synchonized	
 	input     [31:0] wb_dat_i,	// data input from chipset/cpu
-	output reg[31:0]wb_dat_o = 0,	// data output to chipset/cpu
+	output reg[31:0] wb_dat_o = 0,	// data output to chipset/cpu
 	output reg       wb_ack = 0, 
 	input     [23:0] wb_adr,		// lower 2 bits are ignored.
 	input      [3:0] wb_sel,		// 
@@ -109,8 +109,9 @@ end
 
 localparam CYCLE_PRECHARGE  = 4'd0;
 localparam CYCLE_RAS_START  = 4'd3;
+localparam CYCLE_RAS_NEXT   = CYCLE_RAS_START + 1'd1;
 localparam CYCLE_RFSH_START = CYCLE_RAS_START; 
-localparam CYCLE_CAS0 		= CYCLE_RAS_START  + RASCAS_DELAY;
+localparam CYCLE_CAS0 		 = CYCLE_RAS_START  + RASCAS_DELAY;
 localparam CYCLE_CAS1       = CYCLE_CAS0 + 4'd1;		
 localparam CYCLE_CAS2       = CYCLE_CAS1 + 4'd1;		
 localparam CYCLE_CAS3       = CYCLE_CAS2 + 4'd1;				
@@ -154,7 +155,7 @@ always @(posedge sd_clk) begin
 				if(reset == 13) begin
 					$display("precharging all banks");
 					sd_cmd 		<= CMD_PRECHARGE;
-					sd_addr[10] 	<= 1'b1;      // precharge all banks
+					sd_addr[10] <= 1'b1;      // precharge all banks
 				end
 
 				if(reset == 2) begin
@@ -229,29 +230,25 @@ always @(posedge sd_clk) begin
 					sd_ba 	<= sd_bank;
 					sd_active_row[sd_bank] <= sd_row;
 					sd_bank_active[sd_bank] <= 1;
-
-					if(sd_reading) begin 
-						sd_dqm <= 2'b00;
-					end else begin 
-						sd_dqm <= 2'b11;
-					end
 				end
+				
+				CYCLE_RAS_NEXT: sd_addr[12:11] <= 2'b11;
 
 				// this is the first CAS cycle
 				CYCLE_CAS0: begin 
 					// always, always read on a 32bit boundary and completely ignore the lsb of wb_adr.
-					sd_addr <= { 4'b0000, wb_adr[23], wb_adr[8:2], 1'b0 };  // no auto precharge
-					sd_dqm		<= ~wb_sel[1:0];
+					sd_addr  <= { 4'b0000, wb_adr[23], wb_adr[8:2], 1'b0 };  // no auto precharge
 					sd_ba 	<= sd_bank;
 
 					if (sd_reading) begin 
 						sd_cmd <= CMD_READ;
 					end else if (sd_writing) begin 
-						sd_cmd		<= CMD_WRITE;
+						sd_cmd	<= CMD_WRITE;
+						sd_addr[12:11] <= ~wb_sel[1:0];
 `ifdef VERILATOR
-						sd_q		<= wb_dat_i[15:0];
+						sd_q	<= wb_dat_i[15:0];
 `else
-						sd_dq	 		<= wb_dat_i[15:0];
+						sd_dq	<= wb_dat_i[15:0];
 `endif
 					end
 				end
@@ -259,7 +256,6 @@ always @(posedge sd_clk) begin
 				CYCLE_CAS1: begin 
 					// now we access the second part of the 32 bit location.
 					sd_addr <= { 4'b0000, wb_adr[23], wb_adr[8:2], 1'b1 };  // no auto precharge
-					sd_dqm		<= ~wb_sel[3:2];
 					if (sd_reading) begin 
 						sd_cmd <= CMD_READ;
 						if (burst_mode & can_burst) begin 
@@ -267,11 +263,12 @@ always @(posedge sd_clk) begin
 						end
 					end else if (sd_writing) begin 
 						sd_cmd		<= CMD_WRITE;
+						sd_addr[12:11] <= ~wb_sel[3:2];
 						sd_done		<= ~sd_done;
 `ifdef VERILATOR
-						sd_q        <= wb_dat_i[31:16];
+						sd_q  <= wb_dat_i[31:16];
 `else
-						sd_dq 		<= wb_dat_i[31:16];
+						sd_dq <= wb_dat_i[31:16];
 `endif
 					end 
 				end
@@ -280,7 +277,6 @@ always @(posedge sd_clk) begin
 					if (sd_burst) begin 
 						// always, always read on a 32bit boundary and completely ignore the lsb of wb_adr.
 						sd_addr <= { 4'b0000, wb_adr[23], wb_adr[8:3], 2'b10 };  // no auto precharge
-						sd_dqm		<= ~wb_sel[1:0];
 						if (sd_reading) begin 
 							sd_cmd <= CMD_READ;
 						end  
@@ -291,7 +287,6 @@ always @(posedge sd_clk) begin
 					if (sd_burst) begin 
 						// always, always read on a 32bit boundary and completely ignore the lsb of wb_adr.
 						sd_addr	<= { 4'b0000, wb_adr[23], wb_adr[8:3], 2'b11 };  // no auto precharge
-						sd_dqm	<= ~wb_sel[3:2];
 						if (sd_reading) begin 
 							sd_cmd <= CMD_READ;
 						end  
@@ -300,7 +295,7 @@ always @(posedge sd_clk) begin
 
 				CYCLE_READ0: begin 
 					if (sd_reading) begin 
-					        sd_dat[15:0] <= sd_dq;
+						sd_dat[15:0] <= sd_dq;
 					end else begin
 						if (sd_writing) sd_cycle <= CYCLE_END;
 					end 
@@ -374,6 +369,7 @@ assign sd_cs_n  = sd_cmd[3];
 assign sd_ras_n = sd_cmd[2];
 assign sd_cas_n = sd_cmd[1];
 assign sd_we_n  = sd_cmd[0];
-assign sd_cke	= 1'b1;
+assign sd_cke   = 1'b1;
+assign sd_dqm   = sd_addr[12:11];
 
 endmodule

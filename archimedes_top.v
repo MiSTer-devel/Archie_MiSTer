@@ -100,35 +100,35 @@ module archimedes_top #(parameter CLKCPU)
 );		      
 
 // cpu bus
-(*KEEP="TRUE"*)wire [31:0] cpu_address /* synthesis keep */;
-(*KEEP="TRUE"*)wire [3:0]	cpu_sel /* synthesis keep */ ;
+wire [31:0] cpu_address;
+wire [3:0]	cpu_sel;
 
 
-(*KEEP="TRUE"*)wire 	   cpu_spvmd/* synthesis keep */ ;
-(*KEEP="TRUE"*)wire [31:0] cpu_dat_o/* synthesis keep */ ;
-(*KEEP="TRUE"*)wire [31:0] cpu_dat_i/* synthesis keep */ ;
+wire			cpu_spvmd;
+wire [31:0] cpu_dat_o;
+wire [31:0] cpu_dat_i;
 
-(*KEEP="TRUE"*)wire			cpu_cyc/* synthesis keep */ ;
-(*KEEP="TRUE"*)wire			cpu_stb/* synthesis keep */ ;
-(*KEEP="TRUE"*)wire 		cpu_we/* synthesis keep */ ;
+wire			cpu_cyc;
+wire			cpu_stb;
+wire			cpu_we;
 
-(*KEEP="TRUE"*)wire			cpu_ack/* synthesis keep */ ;
-(*KEEP="TRUE"*)wire			cpu_err/* synthesis keep */ ;
-(*KEEP="TRUE"*)wire			cpu_irq/* synthesis keep */ ;
-(*KEEP="TRUE"*)wire			cpu_firq/* synthesis keep */ ;
+wire			cpu_ack;
+wire			cpu_err;
+wire			cpu_irq;
+wire			cpu_firq;
 
 // video DMA signals.
-(*KEEP="TRUE"*)wire [31:0]	vid_address; // VIDC D31-D0
-(*KEEP="TRUE"*)wire 			vid_flybk /* synthesis keep */; // VIDC FLYBK 
-(*KEEP="TRUE"*)wire 			vid_req; // VIDC REQ
-(*KEEP="TRUE"*)wire 			vid_ack; // VIDC ACK 
+wire [31:0]	vid_address; // VIDC D31-D0
+wire 			vid_flybk; // VIDC FLYBK 
+wire 			vid_req; // VIDC REQ
+wire 			vid_ack; // VIDC ACK 
 
-(*KEEP="TRUE"*)wire			ioc_cs/* synthesis keep */ ;
-(*KEEP="TRUE"*)wire			ioc_ack/* synthesis keep */ ;
-(*KEEP="TRUE"*)wire [7:0]	ioc_dat_o/* synthesis keep */ ;
+wire			ioc_cs;
+wire			ioc_ack;
+wire [7:0]	ioc_dat_o;
 
-(*KEEP="TRUE"*)wire			rom_low_cs/* synthesis keep */ ;
-wire [5:0]						ioc_cin, ioc_cout;
+wire			rom_low_cs;
+wire [5:0]	ioc_cin, ioc_cout;
 
 a23_core ARM(
 

@@ -43,8 +43,8 @@ module vidc_fifo #(
 		
 		output reg [WORD_WIDTH-1:0] wr_ptr,
 		output reg [WORD_WIDTH-1:0] space,
-		output reg 		 			full,
-		output 						empty
+		output reg                  full,
+		output                      empty
 );
 
 localparam MEM_DEPTH = 2**FIFO_SIZE;
@@ -90,21 +90,15 @@ always @(posedge wr_clk) begin
 	end else begin 
 	
 		if (wr_ptr != {rd_ptr_r[BYTE_WIDTH-1:2]}) begin
-		
 			full	<=  1'b0;
-		
 		end 
 	
 		if (wr_en == 1'b1) begin
-		
 			data[wr_ptr] <= din;
 			wr_ptr 	<= 	 wr_ptr + 2'd1;
 			full  	<=  (wr_ptr + 2'd1) == {rd_ptr_r[BYTE_WIDTH-1:2]};
-		
 		end
-		
 	end 
-	
 end 
 
 wire [7:0] q;
@@ -136,8 +130,6 @@ end
 assign empty = !full & space == 'd0;
 
 // cross the clock domain.
-assign q = (rd_ptr[1:0] == 2'b00) ? data[{rd_ptr[BYTE_WIDTH-1:2]}][7:0] :
-			  (rd_ptr[1:0] == 2'b01) ? data[{rd_ptr[BYTE_WIDTH-1:2]}][15:8] :
-			  (rd_ptr[1:0] == 2'b10) ? data[{rd_ptr[BYTE_WIDTH-1:2]}][23:16] : data[{rd_ptr[BYTE_WIDTH-1:2]}][31:24];
-			  
+assign q = data[{rd_ptr[BYTE_WIDTH-1:2]}][{rd_ptr[1:0],3'b000} +:8];
+
 endmodule

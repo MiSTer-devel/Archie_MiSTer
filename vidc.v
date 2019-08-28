@@ -50,8 +50,8 @@ module vidc #(parameter CLKCPU)
 	output 	 	  flybk,
 
 	// video outputs
-	output 	 	  hsync,
-	output 	 	  vsync,
+	output 	 	  hsync, // active low
+	output 	 	  vsync, // active low
 
 	output  [3:0] video_r,
 	output  [3:0] video_g,
@@ -99,11 +99,6 @@ wire [7:0] 		csr_data;
 reg  [2:0] 		csr_shift_count;
 reg  [7:0] 		csr_data_latch = 8'd0;
 
-// dmacon
-wire		cur_load;
-wire		vid_load;
-wire		snd_load;
-
 // internal data request lines
 wire		currq_int;
 wire		vidrq_int;
@@ -124,49 +119,42 @@ vidc_timing TIMING(
 	.o_vsync		( vsync		),
 	.o_flyback	( flybk		),
 	.o_enabled	( enabled	),
-	.o_cursor	( cur_enabled	),
+	.o_cursor	( cur_enabled ),
 	.o_border	( border		)
 );
 
 // this module does the math for a DMA channel
 vidc_dmachannel VIDEODMA (
 
-	.rst		   ( flybk | rst_i	),
-	.clkcpu		( clkcpu		),
-	.clkdev		( clkpix		),
-	.cedev		( cepix		),
-	
-	.cpu_data	( viddat		),
-	.ak			( vidak			),
-	.rq			( vidrq_int		),
-	
-	.busy			( vid_load		),
-	.stall		( ~hsync		),
-	
-	.dev_data	( pix_data		),
-	.dev_ak		( pix_ack		)
+	.rst		   ( flybk | rst_i ),
+	.clkcpu		( clkcpu    ),
+	.clkdev		( clkpix    ),
+	.cedev		( cepix     ),
 
+	.cpu_data	( viddat    ),
+	.ak			( vidak     ),
+	.rq			( vidrq_int	),
+	.stall		( ~hsync    ),
+
+	.dev_data	( pix_data  ),
+	.dev_ak		( pix_ack   )
 );
 
 // this module does the math for a DMA channel
 vidc_dmachannel #(.FIFO_SIZE(2)) CURSORDMA (
 
-	.rst			( flybk | rst_i	),
-	.clkcpu		( clkcpu		),
-	.clkdev		( clkpix		),
-	.cedev		( cepix		),
-	
-	.cpu_data	( viddat		),
-	
-	.ak			( vidak 		),
-	.rq			( currq_int		),
-	
-	.busy			( cur_load		),
-	.stall		( hsync | vid_load	),
+	.rst			( flybk | rst_i ),
+	.clkcpu		( clkcpu    ),
+	.clkdev		( clkpix    ),
+	.cedev		( cepix     ),
 
-	.dev_data	( csr_data		),
-	.dev_ak		( csr_ack		)
+	.cpu_data	( viddat    ),
+	.ak			( vidak     ),
+	.rq			( currq_int ),
+	.stall		( hsync | vidrq_int ),
 
+	.dev_data	( csr_data  ),
+	.dev_ak		( csr_ack   )
 );
 
 
@@ -181,21 +169,17 @@ end
 // this module does the math for a DMA channel
 vidc_dmachannel SOUNDDMA (
 
-	.rst			( rst_i		),
-	.clkcpu		( clkcpu		),
-	.clkdev		( clkpix		),
-	.cedev		( ceaud		),
+	.rst			( rst_i     ),
+	.clkcpu		( clkcpu    ),
+	.clkdev		( clkpix    ),
+	.cedev		( ceaud     ),
 	
-	.cpu_data	( viddat		),
-	.ak			( sndak			),
-	.rq			( sndrq			),
-	
-	.busy			( snd_load		),
-	.stall		( 1'b0			), 
-	
+	.cpu_data	( viddat    ),
+	.ak			( sndak     ),
+	.rq			( sndrq     ),
+
 	.dev_data	( snd_sam_data	),
 	.dev_ak		( snd_sam_en	)
-
 );
 
 vidc_audio AUDIOMIXER(
@@ -379,7 +363,7 @@ assign video_b[2:0] = vidc_colour[10:8];
 
 assign video_en     = enabled;
 
-// this demux's the two dma channels that share the vidrq. 
-assign vidrq = hsync ? vidrq_int : ~vid_load & currq_int;
+// two dma channels share the vidrq. 
+assign vidrq = vidrq_int | currq_int;
 
 endmodule

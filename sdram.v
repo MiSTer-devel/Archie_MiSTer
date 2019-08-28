@@ -33,13 +33,13 @@ module sdram
 	output           sd_cke,		// clock enable.
 	inout  reg[15:0] sd_dq,		// 16 bit bidirectional data bus
 	output reg[12:0] sd_addr,	// 13 bit multiplexed address bus
-	output    [1:0]  sd_dqm = 2'b00,		// two byte masks
-	output reg[1:0]  sd_ba = 2'b00,		// two banks
+	output    [1:0]  sd_dqm,	// two byte masks
+	output reg[1:0]  sd_ba,		// two banks
 	output           sd_cs_n,	// a single chip select
 	output           sd_we_n,	// write enable
 	output           sd_ras_n,	// row address select
 	output           sd_cas_n,	// columns address select
-	output reg       sd_ready = 0,	// sd ready.
+	output reg       sd_ready,	// sd ready.
 
 	// cpu/chipset interface
 
@@ -56,7 +56,7 @@ module sdram
 );
 
 localparam RASCAS_DELAY   = 3'd3;   // tRCD=20ns -> 3 cycles@128MHz
-localparam BURST_LENGTH   = 3'b000; // 000=1, 001=2, 010=4, 011=8, 111 = continuous.
+localparam BURST_LENGTH   = 3'b010; // 000=1, 001=2, 010=4, 011=8, 111 = continuous.
 localparam ACCESS_TYPE    = 1'b0;   // 0=sequential, 1=interleaved
 localparam CAS_LATENCY    = 3'd3;   // 2/3 allowed
 localparam OP_MODE        = 2'b00;  // only 00 (standard operation) allowed
@@ -65,7 +65,6 @@ localparam WRITE_BURST 	  = 1'b0;   // 0= write burst enabled, 1=only single acc
 localparam RFC_DELAY      = 4'd7;   // tRFC=66ns -> 9 cycles@128MHz
 
 // all possible commands
-localparam CMD_INHIBIT         = 4'b1111;
 localparam CMD_NOP             = 4'b0111;
 localparam CMD_ACTIVE          = 4'b0011;
 localparam CMD_READ            = 4'b0101;
@@ -82,11 +81,6 @@ reg [4:0] reset;
 reg[31:0] sd_dat	  = 0; // data output to chipset/cpu
 reg[31:0] sd_dat_nxt = 0; // data output to chipset/cpu
 
-reg			sd_stb 	= 1'b0; // copy of the wishbone bus signal.
-reg			sd_we 	= 1'b0; // copy of the wishbone bus signal.
-reg			sd_cyc 	= 1'b0; // copy of the wishbone bus signal.
-reg			sd_burst = 1'b0;
-
 reg	[3:0]	sd_cycle= 4'd0;
 reg			sd_done = 1'b0;
 
@@ -94,22 +88,25 @@ reg [3:0] 	sd_cmd 	= 4'd0;   // current command sent to sd ram
 
 reg [9:0]	sd_refresh = 10'd0;
 reg			sd_auto_refresh = 1'b0; 
-wire		sd_req = wb_stb & wb_cyc & ~wb_ack;
+wire			sd_req = wb_stb & wb_cyc & ~wb_ack;
+wire        sd_reading = wb_stb & wb_cyc & ~wb_we;
+wire        sd_writing = wb_stb & wb_cyc & wb_we;
+
 reg  [11:0] sd_active_row[3:0];
 reg   [3:0] sd_bank_active;
 wire  [1:0] sd_bank = wb_adr[22:21];
 wire [11:0] sd_row = wb_adr[20:9];
 
 initial begin 
-	t			= 4'd0;
-	reset 	= 5'h1f;
-	sd_addr	= 13'd0;
-	sd_cmd 	= CMD_INHIBIT;
+	t       = 4'd0;
+	reset   = 5'h1f;
+	sd_addr = 13'd0;
+	sd_cmd  = CMD_NOP;
+	sd_ready= 0;
 end
 
 localparam CYCLE_PRECHARGE  = 4'd0;
 localparam CYCLE_RAS_START  = 4'd3;
-localparam CYCLE_RAS_NEXT   = CYCLE_RAS_START + 1'd1;
 localparam CYCLE_RFSH_START = CYCLE_RAS_START; 
 localparam CYCLE_CAS0 		 = CYCLE_RAS_START  + RASCAS_DELAY;
 localparam CYCLE_CAS1       = CYCLE_CAS0 + 4'd1;		
@@ -119,22 +116,15 @@ localparam CYCLE_READ0      = CYCLE_CAS0 + CAS_LATENCY + 4'd1;
 localparam CYCLE_READ1      = CYCLE_READ0+ 1'd1;
 localparam CYCLE_READ2      = CYCLE_READ1+ 1'd1;
 localparam CYCLE_READ3      = CYCLE_READ2+ 1'd1;
-localparam CYCLE_END	   	= CYCLE_READ3+ 1'd1;
+localparam CYCLE_END	   	 = CYCLE_READ3+ 1'd1;
 localparam CYCLE_RFSH_END   = CYCLE_RFSH_START + RFC_DELAY; 
 
 localparam RAM_CLK          = 128000000;
 localparam REFRESH_PERIOD   = (RAM_CLK / (16 * 8192)) - CYCLE_END;
 
-`ifdef VERILATOR
-reg [15:0] sd_q;
-assign sd_dq = (sd_writing && (sd_cycle == CYCLE_CAS1 || sd_cycle == CYCLE_CAS2)) ? sd_q : 16'bZZZZZZZZZZZZZZZZ;
-`endif
- 
 always @(posedge sd_clk) begin 
 
-`ifndef VERILATOR
-		sd_dq <= 16'bZZZZZZZZZZZZZZZZ;
-`endif
+	sd_dq <= 16'bZZZZZZZZZZZZZZZZ;
 	sd_cmd <= CMD_NOP;
 
 	if (sd_rst) begin 
@@ -142,6 +132,7 @@ always @(posedge sd_clk) begin
 		reset 	<= 5'h1f;
 		sd_addr	<= 13'd0;
 		sd_ready  <= 0;
+		sd_ba    <= 0;
 	end else begin
 		if (!sd_ready) begin
 			t <= t + 4'd1;
@@ -169,25 +160,17 @@ always @(posedge sd_clk) begin
 					sd_addr		<= MODE;
 				end
 
-				if(reset == 0) sd_ready <= 1;
+				if(!reset) sd_ready <= 1;
 			end
 		end else begin
 	
-			// bring the wishbone bus signal into the ram clock domain.
-
-			sd_we	<= wb_we;
-			if (sd_req) begin 
-				sd_stb	<= wb_stb;
-				sd_cyc	<= wb_cyc;
-			end
-
 			sd_refresh <= sd_refresh + 9'd1;
 
 			// this is the auto refresh code.
 			// it kicks in so that 8192 auto refreshes are 
 			// issued in a 64ms period. Other bus operations 
 			// are stalled during this period.
-			if ((sd_refresh > REFRESH_PERIOD) && (sd_cycle == 4'd0)) begin 
+			if ((sd_refresh > REFRESH_PERIOD) && !sd_cycle) begin 
 				sd_auto_refresh <= 1'b1;
 				sd_refresh		<= 10'd0;
 				sd_cmd			<= CMD_PRECHARGE;
@@ -207,20 +190,21 @@ always @(posedge sd_clk) begin
 				end
 				endcase
 
-			end else if (sd_cyc | (sd_cycle != 0) | (sd_cycle == 0 && sd_req)) begin 
+			end else if (sd_cycle || sd_req) begin 
 
 				// while the cycle is active count.
 				sd_cycle <= sd_cycle + 3'd1;
 				case (sd_cycle)
 				CYCLE_PRECHARGE: begin
+					sd_addr[12:11] <= 2'b11;
 					if (~sd_bank_active[sd_bank])
-						sd_cycle	<= CYCLE_RAS_START;
+						sd_cycle	   <= CYCLE_RAS_START;
 					else if (sd_active_row[sd_bank] == sd_row)
-						sd_cycle	<= CYCLE_CAS0 - 1'd1; // FIXME: Why doesn't work without -1?
+						sd_cycle	   <= CYCLE_CAS0 - 1'd1; // FIXME: Why doesn't work without -1?
 					else begin
 						sd_cmd		<= CMD_PRECHARGE;
 						sd_addr[10] <= 0;
-						sd_ba		<= sd_bank;
+						sd_ba		   <= sd_bank;
 					end
 				end
 
@@ -231,8 +215,6 @@ always @(posedge sd_clk) begin
 					sd_active_row[sd_bank] <= sd_row;
 					sd_bank_active[sd_bank] <= 1;
 				end
-				
-				CYCLE_RAS_NEXT: sd_addr[12:11] <= 2'b11;
 
 				// this is the first CAS cycle
 				CYCLE_CAS0: begin 
@@ -245,52 +227,19 @@ always @(posedge sd_clk) begin
 					end else if (sd_writing) begin 
 						sd_cmd	<= CMD_WRITE;
 						sd_addr[12:11] <= ~wb_sel[1:0];
-`ifdef VERILATOR
-						sd_q	<= wb_dat_i[15:0];
-`else
 						sd_dq	<= wb_dat_i[15:0];
-`endif
 					end
 				end
 
 				CYCLE_CAS1: begin 
 					// now we access the second part of the 32 bit location.
-					sd_addr <= { 4'b0000, wb_adr[23], wb_adr[8:2], 1'b1 };  // no auto precharge
-					if (sd_reading) begin 
-						sd_cmd <= CMD_READ;
-						if (burst_mode & can_burst) begin 
-							sd_burst <= 1'b1; 
-						end
-					end else if (sd_writing) begin 
+					if (sd_writing) begin 
+						sd_addr <= { 4'b0000, wb_adr[23], wb_adr[8:2], 1'b1 };  // no auto precharge
 						sd_cmd		<= CMD_WRITE;
 						sd_addr[12:11] <= ~wb_sel[3:2];
 						sd_done		<= ~sd_done;
-`ifdef VERILATOR
-						sd_q  <= wb_dat_i[31:16];
-`else
 						sd_dq <= wb_dat_i[31:16];
-`endif
 					end 
-				end
-				
-				CYCLE_CAS2: begin 
-					if (sd_burst) begin 
-						// always, always read on a 32bit boundary and completely ignore the lsb of wb_adr.
-						sd_addr <= { 4'b0000, wb_adr[23], wb_adr[8:3], 2'b10 };  // no auto precharge
-						if (sd_reading) begin 
-							sd_cmd <= CMD_READ;
-						end  
-					end
-				end
-
-				CYCLE_CAS3: begin 
-					if (sd_burst) begin 
-						// always, always read on a 32bit boundary and completely ignore the lsb of wb_adr.
-						sd_addr	<= { 4'b0000, wb_adr[23], wb_adr[8:3], 2'b11 };  // no auto precharge
-						if (sd_reading) begin 
-							sd_cmd <= CMD_READ;
-						end  
-					end
 				end
 
 				CYCLE_READ0: begin 
@@ -319,16 +268,9 @@ always @(posedge sd_clk) begin
 						sd_dat_nxt[31:16] <= sd_dq;
 					end
 				end
-
-				CYCLE_END: begin 
-					sd_burst <= 1'b0;
-					sd_cyc <= 1'b0;
-					sd_stb <= 1'b0;
-				end
 				endcase
 			end else begin
-				sd_cycle 	<= 4'd0;
-				sd_burst <= 1'b0;
+				sd_cycle <= 4'd0;
 			end
 		end
 	end
@@ -360,9 +302,6 @@ always @(posedge wb_clk) begin
 end
 
 wire burst_mode = wb_cti == 3'b010;
-wire can_burst = wb_adr[2] === 1'b0;
-wire sd_reading = sd_stb & sd_cyc & ~sd_we;
-wire sd_writing = sd_stb & sd_cyc & sd_we;
 
 // drive control signals according to current command
 assign sd_cs_n  = sd_cmd[3];

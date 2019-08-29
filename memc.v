@@ -36,7 +36,8 @@ module memc(
 		input 	  		cpu_stb,
 		input 	  		cpu_cyc,
 		output 	  		cpu_err,
-		output 	  		cpu_ack, 
+		output   		cpu_ack, 
+		output [31:0]  cpu_dout,
 
 		input [25:0]	cpu_address,
 		input [3:0]		cpu_sel,
@@ -46,8 +47,9 @@ module memc(
 		output 	  		mem_stb_o,
 		output 	  		mem_cyc_o,
 		output 	  		mem_we_o,
-		output [3:0]	mem_sel_o,
-		
+		output  [3:0]	mem_sel_o,
+		input  [31:0]  mem_dat_i,
+
 		input 	  		mem_ack_i, 
 		output [2:0]	mem_cti_o, // burst / normal
 		 
@@ -77,45 +79,45 @@ module memc(
 
 );
 
-   parameter INITIAL_CURSOR_BASE = 19'h0_0000;
-   parameter INITIAL_SCREEN_BASE = 19'h0_0000;
-   parameter INITIAL_SCREEN_SIZE = 19'h4_b000;
+parameter INITIAL_CURSOR_BASE = 19'h0_0000;
+parameter INITIAL_SCREEN_BASE = 19'h0_0000;
+parameter INITIAL_SCREEN_SIZE = 19'h4_b000;
 
-	reg 			rom_overlay;
+reg 			rom_overlay;
 
-	reg [18:0] 	cur_address; // actual
-	reg [18:0] 	cur_init;
-	
-	reg [18:0] 	vid_address; // actual
-	reg [18:0] 	vid_init;
-	reg [18:0] 	vid_start;
-	reg [18:0] 	vid_end;
-	
-	reg [18:0] 	snd_sptr; // actual/current
-	reg [18:0] 	snd_endc;
-	
-	reg			snd_next_valid;
-	reg [18:0] 	snd_start;
-	reg [18:0] 	snd_endn;
-   
-	reg [13:0]	memc_control = 14'd0;
-	reg			cur_load;
-	reg			vid_load;
-	reg			snd_load;
-	reg			cpu_load;
+reg [18:0] 	cur_address; // actual
+reg [18:0] 	cur_init;
 
-	reg [3:0]	dma_ack_r;
-   
-	wire 		dma_in_progress = cur_load | vid_load | snd_load;
-	wire 		dma_request	= ~flybk & vidrq | memc_control[11] & sndrq;
-	reg         dma_request_r;    
-	wire 		video_dma_ip = cur_load | vid_load;
-	wire 		sound_dma_ip = snd_load;
-	
-	wire 		address_valid;
-	wire		cpu_ram_cycle;
-   
-	wire 		phycs, tablew, romcs, memcw;
+reg [18:0] 	vid_address; // actual
+reg [18:0] 	vid_init;
+reg [18:0] 	vid_start;
+reg [18:0] 	vid_end;
+
+reg [18:0] 	snd_sptr; // actual/current
+reg [18:0] 	snd_endc;
+
+reg			snd_next_valid;
+reg [18:0] 	snd_start;
+reg [18:0] 	snd_endn;
+
+reg [13:0]	memc_control = 14'd0;
+reg			cur_load;
+reg			vid_load;
+reg			snd_load;
+reg			cpu_load;
+
+reg [3:0]	dma_ack_r;
+
+wire 		dma_in_progress = cur_load | vid_load | snd_load;
+wire 		dma_request	= (~flybk & vidrq) | (memc_control[11] & sndrq);
+reg      dma_request_r;    
+wire 		video_dma_ip = cur_load | vid_load;
+wire 		sound_dma_ip = snd_load;
+
+wire 		address_valid;
+wire		cpu_ram_cycle;
+
+wire 		phycs, tablew, romcs, memcw;
 
 // register addresses.
 localparam REG_Vinit 	= 3'b000;
@@ -161,20 +163,32 @@ initial begin
    dma_ack_r = 4'd0;
 
    // initial cursor and video addresses
-   vid_init = INITIAL_SCREEN_BASE;
-   cur_init = INITIAL_CURSOR_BASE;
+   vid_init  = INITIAL_SCREEN_BASE;
+   cur_init  = INITIAL_CURSOR_BASE;
 
    vid_start = INITIAL_SCREEN_BASE;
    vid_end   = INITIAL_SCREEN_BASE + INITIAL_SCREEN_SIZE;
    
 end
 
-always @(posedge clkcpu) begin
+reg [31:0] cache_data[4];
+reg        cache_valid;
+reg [23:4] cache_addr;
+reg        cache_ack;
 
-	if (rst_i == 1'b1) begin 
+assign cpu_dout = cache_data[caddr[3:2]];
+
+always @(posedge clkcpu) begin
+	reg cache_rcv, cache_test;
+	reg [1:0] cache_cnt;
+	reg [1:0] cache_wraddr;
+
+	cache_ack <= 0;
+
+	if (rst_i) begin 
 		
-		vid_init <= INITIAL_SCREEN_BASE;
-		cur_init <= INITIAL_CURSOR_BASE;
+		vid_init 	<= INITIAL_SCREEN_BASE;
+		cur_init 	<= INITIAL_CURSOR_BASE;
 		vid_start 	<= INITIAL_SCREEN_BASE;
 		vid_end		<= INITIAL_SCREEN_BASE + INITIAL_SCREEN_SIZE;
 		vid_address <= INITIAL_SCREEN_BASE;
@@ -185,90 +199,110 @@ always @(posedge clkcpu) begin
 	
 		memc_control[11] <= 1'b0; // disable sound dma on reset.
 
-        dma_request_r <= 1'b0;
-       
-	end else begin 
-    
-    
-        dma_request_r <= dma_request;
-	
-		// cpu cycle.
-		if (cpu_cyc & cpu_stb) begin 
-		
-			// logic to ensure that the rom overlay gets deactivated.
-			if (cpu_address[25:24] == 2'b11) begin
-			
-				rom_overlay	<= 1'b0;
-			
-			end
-		
-			// ensure no video cycle is active or about to start. 
-			if (~dma_request_r & ~dma_in_progress) begin 
-				
-				cpu_load <= 1'b1;
-		
-			end
-			
-			// prevent the cpu hogging the bus.
-			if (cpu_load & dma_request_r & (cpu_ack | cpu_err)) begin 
-			
-				cpu_load <= 1'b0;
-			
-			end 
-			
-			if (memw) begin 
-				
-				// load the registers. 
-				// all the registers are loaded here.
-				case (cpu_address[19:17])
+      dma_request_r <= 1'b0;
+		cache_rcv <= 0;
+      cache_valid <= 0;
+		cache_test <= 0;
 
-					REG_Vinit: 	vid_init	<= {cpu_address[16:2], 4'b0000};
-					REG_Vstart: vid_start	<= {cpu_address[16:2], 4'b0000};
-					REG_Vend: 	vid_end	 	<= {cpu_address[16:2], 4'b0000};
-					REG_Cinit: 	cur_init	<= {cpu_address[16:2], 4'b0000};
-					
-					REG_Sstart: begin 
-					
-						$display("Sstart: %x", {cpu_address[16:2], 4'b0000}); 	
-						snd_next_valid <= 1'b1;
-						snd_start	<= {cpu_address[16:2], 4'b0000}; 
-					
-					end
-					
-					REG_SendN: begin 
-					
-						$display("SendN: %x", {cpu_address[16:2], 4'b0000});
-						snd_endn	<= {cpu_address[16:2], 4'b0000};  
-					
-					end
-					
-					REG_Sptr: begin 
-					
-						$display("Sound buffer swap");
-						snd_sptr 	<= snd_start;
-												
-						if (snd_next_valid == 1'b1) begin
-							snd_endc	<= snd_endn;
-							snd_next_valid 	<= 1'b0;
-						end
-					
-					end
-					
-					REG_Ctrl: begin 
-						
-						$display("MEMC Control Register: %x", cpu_address[13:0]);
-						memc_control <= cpu_address[13:0];
-					
-					end
-					
-				endcase
+	end else begin 
+
+		if(cache_rcv & mem_ack_i) begin
+			cache_data[cache_wraddr] <= mem_dat_i;
+			cache_wraddr <= cache_wraddr + 1'd1;
+			cache_cnt <= cache_cnt + 1'd1;
+			if(cache_cnt == 2) cache_ack <= 1;
+			if(&cache_cnt) begin
+				cache_rcv <= 0;
+				cache_valid <= 1;
+			end
+		end
+
+		dma_request_r <= dma_request;
+
+		// cpu cycle.
+		if (cpu_cyc & cpu_stb) begin
+			cache_test <= 1;
+			if(cache_valid & (cache_addr == caddr[23:4]) & ~cpu_mem_we) begin
+				// cache hit
+				if(~cache_test) cache_ack <= 1;
+			end
+			else begin
+				// logic to ensure that the rom overlay gets deactivated.
+				if (cpu_address[25:24] == 2'b11) begin
+				
+					rom_overlay	<= 1'b0;
+				
+				end
 			
+				// ensure no video cycle is active or about to start.
+				if (~dma_request_r & ~dma_in_progress) begin
+					cpu_load <= 1'b1;
+					if(~cpu_load) begin
+						if(cpu_mem_we) begin
+							if(cache_addr == caddr[23:4]) cache_valid <= 0;
+						end
+						else begin
+							{cache_addr,cache_wraddr} <= caddr[23:2];
+							cache_valid <= 0;
+							cache_rcv <= 1;
+							cache_cnt <= 0;
+						end
+					end
+				end
+				
+				if (memw) begin 
+					
+					// load the registers. 
+					// all the registers are loaded here.
+					case (cpu_address[19:17])
+
+						REG_Vinit:  vid_init  <= {cpu_address[16:2], 4'b0000};
+						REG_Vstart: vid_start <= {cpu_address[16:2], 4'b0000};
+						REG_Vend:   vid_end   <= {cpu_address[16:2], 4'b0000};
+						REG_Cinit:  cur_init  <= {cpu_address[16:2], 4'b0000};
+
+						REG_Sstart: begin 
+							$display("Sstart: %x", {cpu_address[16:2], 4'b0000}); 	
+							snd_next_valid <= 1'b1;
+							snd_start	<= {cpu_address[16:2], 4'b0000}; 
+						end
+						
+						REG_SendN: begin 
+						
+							$display("SendN: %x", {cpu_address[16:2], 4'b0000});
+							snd_endn	<= {cpu_address[16:2], 4'b0000};  
+						
+						end
+						
+						REG_Sptr: begin 
+						
+							$display("Sound buffer swap");
+							snd_sptr 	<= snd_start;
+													
+							if (snd_next_valid == 1'b1) begin
+								snd_endc	<= snd_endn;
+								snd_next_valid 	<= 1'b0;
+							end
+						
+						end
+						
+						REG_Ctrl: begin 
+							
+							$display("MEMC Control Register: %x", cpu_address[13:0]);
+							memc_control <= cpu_address[13:0];
+						
+						end
+						
+					endcase
+				
+				end
 			end
 		
 		end else begin 
 		
-			cpu_load <= 1'b0;
-		
+			cpu_load <= 0;
+			cache_rcv <= 0;
+			cache_test <= 0;
 		end 
 	
 		// video dma stuff.
@@ -389,24 +423,27 @@ wire [21:2] ram_page = 	memc_control[3:2] == 2'b00 ? {3'd0, cpu_address[18:2]}:
 assign mem_addr_o = 	vid_load		? {5'd0, vid_address[18:2]}	:
 							cur_load		? {5'd0, cur_address[18:2]} :
 							snd_load		? {5'd0, snd_sptr[18:2]} :
-							phycs			? {2'd0, ram_page}  : // use physical memory
-							romcs 			? {3'b010, cpu_address[20:2]} 	: // use 2mb and up for rom space.  
-							table_valid	& logcs	? phys_address[23:2] : 22'd0; // use logical memory.
+							caddr;
 
+wire [23:2] caddr = 	phycs			? {2'd0, ram_page}  : // use physical memory
+							romcs 		? {3'b010, cpu_address[20:2]} 	: // use 2mb and up for rom space.  
+							table_valid	& logcs	? phys_address[23:2] : 22'd0; // use logical memory.
 
 // does this cpu cycle need to go to external RAM/ROM?
 //assign cpu_ram_cycle = cpu_cyc & cpu_stb & (table_valid | phycs | romcs); 
 							
-assign mem_cyc_o  = cpu_load ? cpu_cyc 		: dma_in_progress;
-assign mem_stb_o  = cpu_load ? cpu_stb 		: dma_in_progress;
-assign mem_sel_o	= cpu_load ? cpu_sel 		: 4'b1111;
-assign mem_we_o	= cpu_load ? cpu_we & (phycs & spvmd | table_valid & logcs) & ~romcs  : 1'b0;
-assign mem_cti_o	= cpu_load ? 3'b000 : 3'b010;                   
+assign mem_cyc_o  = cpu_load ? cpu_cyc & ~err : dma_in_progress;
+assign mem_stb_o  = cpu_load ? cpu_stb    : dma_in_progress;
+assign mem_sel_o	= cpu_load ? cpu_sel    : 4'b1111;
+assign mem_we_o	= cpu_load ? cpu_mem_we : 1'b0;
+assign mem_cti_o	= 3'b010;                   
+
+wire   cpu_mem_we	= cpu_we & ((phycs & spvmd) | (table_valid & logcs)) & ~romcs;
 
 assign address_valid = (logcs & table_valid) | rom_low_cs| ioc_cs | memw | tablew | vidc_cs | (phycs & ~cpu_we) | (phycs & spvmd & cpu_we) | romcs; 
 wire   err			= ~address_valid;
 
-assign cpu_ack		= cpu_load ? mem_ack_i & ~err : 1'b0;
+assign cpu_ack		= (mem_we_o ? mem_ack_i : cache_ack) & ~err;
 assign cpu_err		= cpu_load ? mem_ack_i & err : 1'b0;
 
 assign tablew 		= cpu_load & cpu_cyc & cpu_we & spvmd & (cpu_address[25:23] == 3'b111) & (cpu_address[12] == 0) & (cpu_address[7] == 0); // &3800000+ 

@@ -4,7 +4,7 @@
 // mist_io-like module for MiSTer
 //
 // Copyright (c) 2014 Till Harbaum <till@harbaum.org>
-// Copyright (c) 2017-2019 Sorgelig
+// Copyright (c) 2017-2019 Alexey Melnikov
 //
 // This source file is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published
@@ -80,15 +80,20 @@ module hps_io #(parameter STRLEN=0, WIDE=0, VDNUM=1)
 	output reg [DW:0] sd_buff_dout,
 	input      [DW:0] sd_buff_din,
 	output reg        sd_buff_wr,
+	input      [15:0] sd_req_type,
 
 	// ARM -> FPGA download
 	output reg        ioctl_download = 0, // signal indicating an active download
 	output reg  [7:0] ioctl_index,        // menu index used to upload the file
 	output reg        ioctl_wr,
-	output reg [24:0] ioctl_addr,         // in WIDE mode address will be incremented by 2
+	output reg [26:0] ioctl_addr,         // in WIDE mode address will be incremented by 2
 	output reg [DW:0] ioctl_dout,
 	output reg [31:0] ioctl_file_ext,
 	input             ioctl_wait,
+
+	// [15]: 0 - unset, 1 - set. [1:0]: 0 - none, 1 - 32MB, 2 - 64MB, 3 - 128MB
+	// [14]: debug mode: [8]: 1 - phase up, 0 - phase down. [7:0]: amount of shift.
+	output reg [15:0] sdram_sz,
 
 	// RTC MSM6242B layout
 	output reg [64:0] RTC,
@@ -342,6 +347,7 @@ always@(posedge clk_sys) begin
 								1: io_dout <= sd_cmd;
 								2: io_dout <= sd_lba[15:0];
 								3: io_dout <= sd_lba[31:16];
+								4: io_dout <= sd_req_type;
 							endcase
 
 					// send SD config IO -> FPGA
@@ -422,6 +428,9 @@ always@(posedge clk_sys) begin
 					
 					//menu mask
 					'h2E: if(byte_cnt == 1) io_dout <= status_menumask;
+
+					//sdram size set
+					'h31: if(byte_cnt == 1) sdram_sz <= io_din;
 				endcase
 			end
 		end
@@ -440,7 +449,7 @@ always@(posedge clk_sys) begin
 	reg [15:0] cmd;
 	reg  [2:0] cnt;
 	reg        has_cmd;
-	reg [24:0] addr;
+	reg [26:0] addr;
 	reg        wr;
 
 	ioctl_wr <= wr;
@@ -492,6 +501,94 @@ always@(posedge clk_sys) begin
 				endcase
 			end
 		end
+	end
+end
+
+endmodule
+
+//
+// Phase shift helper module for better 64MB/128MB modules support.
+//
+// Copyright (c) 2019 Alexey Melnikov
+//
+
+module phase_shift #(parameter M32MB=0, M64MB=0, M128MB=0)
+(
+	input        reset,
+
+	input        clk,
+	input        pll_locked,
+
+	output reg   phase_en,
+	output reg   updn,
+	input        phase_done,
+
+	input [15:0] sdram_sz,
+	output reg   ready
+);
+
+localparam ph32  = ($signed(M32MB ) >= 0) ? M32MB  : (0 - M32MB);
+localparam ph64  = ($signed(M64MB ) >= 0) ? M64MB  : (0 - M64MB);
+localparam ph128 = ($signed(M128MB) >= 0) ? M128MB : (0 - M128MB);
+
+localparam up32  = ($signed(M32MB ) >= 0) ? 1'b1 : 1'b0;
+localparam up64  = ($signed(M64MB ) >= 0) ? 1'b1 : 1'b0;
+localparam up128 = ($signed(M128MB) >= 0) ? 1'b1 : 1'b0;
+
+always @(posedge clk, posedge reset) begin
+	reg [2:0] state = 0;
+	reg [7:0] cnt;
+	reg [8:0] ph;
+	
+	if(reset) begin
+		state <= 0;
+		ready <= 0;
+	end
+	else begin
+		case(state)
+			0: begin
+					ready <= 0;
+					if(pll_locked) state <= state + 1'd1;
+				end
+			1: if(sdram_sz[15]) begin
+					cnt <= 0;
+					if(sdram_sz[14]) ph <= sdram_sz[8:0];
+					else begin
+						case(sdram_sz[1:0])
+							0: ph <= 0;
+							1: ph <= {up32[0],ph32[7:0]};
+							2: ph <= {up64[0],ph64[7:0]};
+							3: ph <= {up128[0],ph128[7:0]};
+						endcase
+					end
+					state <= state + 1'd1;
+				end
+			2: if(ph[7:0]) begin
+					ph[7:0] <= ph[7:0] - 1'd1;
+					updn <= ph[8];
+					state <= state + 1'd1;
+				end
+				else begin
+					state <= 6;
+				end
+			3: begin
+					phase_en <= 1;
+					state <= state + 1'd1;
+				end
+			4: if(~phase_done) begin
+					phase_en <= 0;
+					state <= state + 1'd1;
+				end
+			5: if(phase_done) begin
+					cnt <= cnt + 1'd1;
+					if(cnt == ph[7:0]) state <= state + 1'd1;
+					else state <= 3;
+				end
+			6: begin
+					ready <= 1;
+					if(!sdram_sz[15]) state <= 0;
+				end
+		endcase
 	end
 end
 

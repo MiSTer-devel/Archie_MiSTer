@@ -150,7 +150,26 @@ pll pll
 	.outclk_0(clk_mem),
 	.outclk_1(SDRAM_CLK),
 	.outclk_2(clk_sys),
-	.locked(pll_ready)
+	.locked(pll_ready),
+
+	.phase_en(phase_en),
+	.scanclk(clk_sys),
+	.updn(updn),
+	.cntsel(1),
+	.phase_done(phase_done)
+);
+
+wire phase_en, updn, phase_done;
+phase_shift #(.M64MB(-4), .M128MB(-13)) phase_shift
+(
+	.clk(clk_sys),
+	.pll_locked(pll_ready),
+
+	.phase_en(phase_en),
+	.updn(updn),
+	.phase_done(phase_done),
+
+	.sdram_sz(sdram_sz)
 );
 
 //////////////////   HPS I/O   ///////////////////
@@ -183,6 +202,7 @@ wire        sd_buff_wr;
 wire  [1:0] img_mounted;
 wire [31:0] img_size;
 wire        img_readonly;
+wire [15:0] sdram_sz;
 
 hps_io #(.STRLEN($size(CONF_STR)>>3), .WIDE(1), .VDNUM(2)) hps_io
 (
@@ -197,7 +217,8 @@ hps_io #(.STRLEN($size(CONF_STR)>>3), .WIDE(1), .VDNUM(2)) hps_io
 	.buttons(buttons),
 	.status(status),
 	.new_vmode(new_vmode),
-	
+	.sdram_sz(sdram_sz),
+
 	.RTC(RTC),
 
 	.kbd_out_data(kbd_out_data),
@@ -404,8 +425,6 @@ always @(posedge CLK_VIDEO) begin
 		ceaud <= 1;
 	end
 end
-
-
 
 wire			ram_ack;
 wire			ram_stb;

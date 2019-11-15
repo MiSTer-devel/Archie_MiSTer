@@ -61,7 +61,6 @@ localparam ACCESS_TYPE    = 1'b0;   // 0=sequential, 1=interleaved
 localparam CAS_LATENCY    = 3'd3;   // 2/3 allowed
 localparam OP_MODE        = 2'b00;  // only 00 (standard operation) allowed
 localparam NO_WRITE_BURST = 1'b1;   // 0= write burst enabled, 1=only single access write
-localparam WRITE_BURST 	  = 1'b0;   // 0= write burst enabled, 1=only single access write
 localparam RFC_DELAY      = 4'd7;   // tRFC=66ns -> 9 cycles@128MHz
 
 // all possible commands
@@ -103,7 +102,7 @@ localparam CYCLE_CAS0 		 = CYCLE_RAS_START  + RASCAS_DELAY;
 localparam CYCLE_CAS1       = CYCLE_CAS0 + 4'd1;		
 localparam CYCLE_CAS2       = CYCLE_CAS1 + 4'd1;		
 localparam CYCLE_CAS3       = CYCLE_CAS2 + 4'd1;				
-localparam CYCLE_READ0      = CYCLE_CAS0 + CAS_LATENCY + 4'd1;
+localparam CYCLE_READ0      = CYCLE_CAS0 + CAS_LATENCY + 4'd2;
 localparam CYCLE_READ1      = CYCLE_READ0+ 1'd1;
 localparam CYCLE_READ2      = CYCLE_READ1+ 1'd1;
 localparam CYCLE_READ3      = CYCLE_READ2+ 1'd1;
@@ -117,13 +116,16 @@ localparam RAM_CLK          = 128000000;
 localparam REFRESH_PERIOD   = (RAM_CLK / (16 * 8192));
 
 always @(posedge sd_clk) begin 
-	reg       sd_reqD, sd_reqD2;
-	reg       sd_newreq;
-	reg [3:0] sd_cycle = CYCLE_IDLE;
-	reg [2:0] word;
+	reg        sd_reqD, sd_reqD2;
+	reg        sd_newreq;
+	reg  [3:0] sd_cycle = CYCLE_IDLE;
+	reg  [2:0] word;
+	reg [15:0] sd_dq_reg;
 
 	sd_dq <= 16'bZZZZZZZZZZZZZZZZ;
 	sd_cmd <= CMD_NOP;
+	
+	sd_dq_reg <= sd_dq;
 	
 	sd_reqD <= sd_req;
 	if(~sd_reqD & sd_req) sd_newreq <= 1;
@@ -135,14 +137,12 @@ always @(posedge sd_clk) begin
 		sd_ready <= 0;
 		sd_ba    <= 0;
 	end else begin
-		if (!sd_ready) begin
+		if (reset) begin
 			t <= t + 4'd1;
 
-			if (t ==4'hF) begin 
-				reset <= reset - 5'd1;		
-			end
+			if (&t) reset <= reset - 5'd1;		
 
-			if (t == 4'h0) begin 
+			if (!t) begin 
 
 				if(reset == 13) begin
 					$display("precharging all banks");
@@ -161,15 +161,15 @@ always @(posedge sd_clk) begin
 					sd_addr		<= MODE;
 				end
 
-				if(!reset) sd_ready <= 1;
 				word <= 0;
 			end
 		end else begin
+			sd_ready <= 1;
 	
 			sd_refresh <= sd_refresh + 9'd1;
 			if(word) begin
 				word <= word + 1'd1;
-				sd_dat[word[2:1]][{word[0],4'b0000} +:16] <= sd_dq;
+				sd_dat[word[2:1]][{word[0],4'b0000} +:16] <= sd_dq_reg;
 			end
 
 			// this is the auto refresh code.
@@ -233,7 +233,7 @@ always @(posedge sd_clk) begin
 
 				CYCLE_READ0: begin 
 					if (sd_reading) begin 
-						sd_dat[0][15:0]<= sd_dq;
+						sd_dat[0][15:0]<= sd_dq_reg;
 						word           <= 1;
 					end else begin
 						if (sd_writing) sd_cycle <= CYCLE_IDLE;

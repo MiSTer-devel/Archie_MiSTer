@@ -20,4 +20,5 @@ set_global_assignment -name VERILOG_FILE sram_line_en.v
 set_global_assignment -name VERILOG_FILE sram_byte_en.v
 set_global_assignment -name VHDL_FILE bram.vhd
 set_global_assignment -name VERILOG_FILE archimedes_top.v
+set_global_assignment -name SDC_FILE Archie.sdc
 set_global_assignment -name SYSTEMVERILOG_FILE Archie.sv

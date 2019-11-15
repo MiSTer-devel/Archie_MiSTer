@@ -34,18 +34,18 @@ module vidc_timing(
 		input [31:0]	cpu_dat,	// data to write (data bus).
 		
 		input 			clkvid,
-		input 			cevid,
-		input				rst,
-				
-		output reg o_vsync,
-		output reg o_hsync, 
+		input			cevid,
+		input			rst,
 
-		output reg o_cursor,
-		output reg o_enabled,
-		output reg o_border,
-		output reg o_flyback /* synthesis keep */ 
+		output        o_vsync,
+		output        o_hsync, 
+
+		output        o_cursor,
+		output        o_enabled,
+		output        o_border,
+		output        o_flyback
     );
-	 
+
 reg [9:0] hcount;
 reg [9:0] vcount;
 
@@ -69,119 +69,155 @@ localparam  VIDEO_VCER 	= 6'b101111;
 localparam  VIDEO_HCSR 	= 6'b100110; 
 
 // vertical registers 
-reg  [9:0] vidc_vcr;  // vertical cycle register
-reg  [9:0] vidc_vswr; // vertical sync width
-reg  [9:0] vidc_vbsr; // vertical border start
-reg  [9:0] vidc_vdsr; // vertical display start
-reg  [9:0] vidc_vder; // vertical display end
-reg  [9:0] vidc_vber; // vertical border end
+reg [9:0]		vidc_vcr;  // vertical cycle register
+reg [9:0]		vidc_vswr; // vertical sync width
+reg [9:0]		vidc_vbsr; // vertical border start
+reg [9:0]		vidc_vdsr; // vertical display start
+reg [9:0]		vidc_vder; // vertical display end
+reg [9:0]		vidc_vber; // vertical border end
 
 // horizontal registers 
-reg  [9:0] vidc_hcr;  //  horizontal cycle register
-reg  [9:0] vidc_hswr; // horizontal sync width
-reg  [9:0] vidc_hbsr; // horizontal border start
-reg  [9:0] vidc_hdsr; // horizontal display start
-reg  [9:0] vidc_hder; // horizontal display end
-reg  [9:0] vidc_hber; // horizontal border end
+reg [9:0]		vidc_hcr;  //  horizontal cycle register
+reg [9:0]		vidc_hswr; // horizontal sync width
+reg [9:0]		vidc_hbsr; // horizontal border start
+reg [9:0]		vidc_hdsr; // horizontal display start
+reg [9:0]		vidc_hder; // horizontal display end
+reg [9:0]		vidc_hber; // horizontal border end
 
 // cursor registers 
-reg [10:0] vidc_hcsr; // horizontal cursor start
-//reg [10:0] vidc_hcer; // horizontal cursor start
-reg  [9:0] vidc_vcsr; // vertical cursor start
-reg  [9:0] vidc_vcer; // vertical cursor end
+reg [10:0]		vidc_hcsr; // horizontal cursor start
+reg [9:0]		vidc_vcsr; // vertical cursor start
+reg [9:0]		vidc_vcer; // vertical cursor end
 
 initial begin 
-	o_flyback = 0;
-	o_cursor	 = 0;
 
-	hcount 	 = 0;
-	vcount 	 = 0;
+	vidc_vcr		= 10'd0; // vertical cycle register
+	vidc_vswr	= 10'd0; // vertical sync width
+	vidc_vbsr	= 10'd0; // vertical border start
+	vidc_vdsr	= 10'd0; // vertical display start
+	vidc_vder	= 10'd0; // vertical display end
+	vidc_vber	= 10'd0; // vertical border end
 
-	vidc_vcr	 = 0; // vertical cycle register
-	vidc_vswr = 0; // vertical sync width
-	vidc_vbsr = 0; // vertical border start
-	vidc_vdsr = 0; // vertical display start
-	vidc_vder = 0; // vertical display end
-	vidc_vber = 0; // vertical border end
+	vidc_hcr    = 10'd0; // horizontal cycle register
+	vidc_hswr	= 10'd0; // horizontal sync width
+	vidc_hbsr	= 10'd0; // horizontal border start
+	vidc_hdsr	= 10'd0; // horizontal display start
+	vidc_hder	= 10'd0; // horizontal display end
+	vidc_hber	= 10'd0; // horizontal border end
+	
+	vidc_hcsr	= 11'd0; // horizontal cursor start
+	vidc_vcsr	= 10'd0;  // vertical cursor start
+	vidc_vcer	= 10'd0;  // vertical cursor end
 
-	vidc_hcr  = 0; // horizontal cycle register
-	vidc_hswr = 0; // horizontal sync width
-	vidc_hbsr = 0; // horizontal border start
-	vidc_hdsr = 0; // horizontal display start
-	vidc_hder = 0; // horizontal display end
-	vidc_hber = 0; // horizontal border end
-
-	vidc_hcsr = 0; // horizontal cursor start
-	//vidc_hcer = 0; // horizontal cursor end
-	vidc_vcsr = 0; // vertical cursor start
-	vidc_vcer = 0; // vertical cursor end
 end 
 
 always @(posedge clkcpu) begin
-	if (wr) begin
-		$display("Writing the timing registers: 0x%08x", cpu_dat);
-		case (cpu_dat[31:26])
 
-			// verical timing
-			VIDEO_VCR:  vidc_vcr  <= cpu_dat[23:14];
-			VIDEO_VSWR: vidc_vswr <= cpu_dat[23:14];
-			VIDEO_VBSR: vidc_vbsr <= cpu_dat[23:14];
-			VIDEO_VBER: vidc_vber <= cpu_dat[23:14];
-			VIDEO_VDSR: vidc_vdsr <= cpu_dat[23:14];
-			VIDEO_VDER: vidc_vder <= cpu_dat[23:14];
-
-			// horizontal timing
-			VIDEO_HCR:  vidc_hcr  <= {cpu_dat[22:14], 1'b0};
-			VIDEO_HSWR: vidc_hswr <= {cpu_dat[22:14], 1'b0};
-			VIDEO_HBSR: vidc_hbsr <= {cpu_dat[22:14], 1'b0};
-			VIDEO_HBER: vidc_hber <= {cpu_dat[22:14], 1'b0};
-			VIDEO_HDSR: vidc_hdsr <= {cpu_dat[22:14], 1'b0};
-			VIDEO_HDER: vidc_hder <= {cpu_dat[22:14], 1'b0};
-
-			VIDEO_HCSR: vidc_hcsr <= cpu_dat[23:13];
-
-			VIDEO_VCSR: vidc_vcsr <= cpu_dat[23:14];
-			VIDEO_VCER: vidc_vcer <= cpu_dat[23:14];
-
-			default:		vidc_vcr <= vidc_vcr;
-		endcase
+	if (wr) begin 
+	
+			$display("Writing the timing registers: 0x%08x", cpu_dat);
+		
+			case (cpu_dat[31:26])  
+				
+				// verical timing
+				VIDEO_VCR: 		vidc_vcr  <= cpu_dat[23:14];
+				VIDEO_VSWR: 	vidc_vswr <= cpu_dat[23:14];
+				VIDEO_VBSR: 	vidc_vbsr <= cpu_dat[23:14];
+				VIDEO_VBER: 	vidc_vber <= cpu_dat[23:14];
+				VIDEO_VDSR: 	vidc_vdsr <= cpu_dat[23:14];
+				VIDEO_VDER: 	vidc_vder <= cpu_dat[23:14];
+				
+				// horizontal timing
+				VIDEO_HCR: 		vidc_hcr  <= {cpu_dat[22:14], 1'b0};
+				VIDEO_HSWR: 	vidc_hswr <= {cpu_dat[22:14], 1'b0};
+				VIDEO_HBSR: 	vidc_hbsr <= {cpu_dat[22:14], 1'b0};
+				VIDEO_HBER: 	vidc_hber <= {cpu_dat[22:14], 1'b0};
+				VIDEO_HDSR: 	vidc_hdsr <= {cpu_dat[22:14], 1'b0};
+				VIDEO_HDER: 	vidc_hder <= {cpu_dat[22:14], 1'b0};
+				
+				VIDEO_HCSR: 	vidc_hcsr <= cpu_dat[23:13];
+					
+				VIDEO_VCSR: 	vidc_vcsr <= cpu_dat[23:14];
+				VIDEO_VCER: 	vidc_vcer <= cpu_dat[23:14];
+				
+				default:		vidc_vcr <= vidc_vcr;
+			endcase
+			
 	end
+
 end
 
-wire vborder  = (vcount >= vidc_vbsr) & (vcount < vidc_vber);
-wire hborder  = (hcount >= vidc_hbsr) & (hcount < vidc_hber);
-wire vdisplay = (vcount >= vidc_vdsr) & (vcount < vidc_vder);
-wire hdisplay = (hcount >= vidc_hdsr) & (hcount < vidc_hder);
-wire vflyback = (vcount >= vidc_vber);
-wire vcursor  = (vcount >= vidc_vcsr) & (vcount < vidc_vcer);
-wire hcursor  = ({1'b0, hcount} >= vidc_hcsr);
+reg vborder;
+reg hborder;
+reg vdisplay;
+reg hdisplay;
+reg vflyback;
+reg vcursor;
+reg hcursor;
+reg hsync;
+reg vsync;
+
+assign o_cursor = hcursor & vcursor;
+assign o_flyback = vflyback;
+assign o_enabled = hdisplay & vdisplay;
+assign o_border = hborder & vborder;
+assign o_vsync = ~vsync;
+assign o_hsync = ~hsync;
 
 always @(posedge clkvid) begin
 
-	if(cevid) begin
-		o_flyback <= vflyback;
-		o_enabled <= hdisplay && vdisplay; 
-		o_border  <= hborder && vborder; 
-		o_vsync 	 <= ~((vcount <= vidc_vswr) & !rst);
-		o_hsync 	 <= ~((hcount < vidc_hswr) & !rst);
-
-		o_cursor  <= hcursor & vcursor;
-
+	if (rst) begin
+		hcount <= 0;
+		vcount <= 0;
+		hborder <= 0;
+		vborder <= 0;
+		hsync <= 0;
+		vsync <= 0;
+		vflyback <= 0;
+		hdisplay <= 0;
+		vdisplay <= 0;
+		hcursor <= 0;
+		vcursor <= 0;
+	end else
+	if (cevid) begin
 		// video frame control
-		if (hcount < vidc_hcr) begin
-			hcount <= hcount + 1'd1;
-		end else begin
-			// horizontal refresh time.
+
+		hcount <= hcount + 1'd1;
+		if (hcount == vidc_hbsr) hborder <= 1;
+		if (hcount == vidc_hber) hborder <= 0;
+		if (hcount == vidc_hdsr) hdisplay <= 1;
+		if (hcount == vidc_hder) hdisplay <= 0;
+		if ({1'b0, hcount} == vidc_hcsr) hcursor <= 1;
+		if (hcount == vidc_hswr) hsync <= 0;
+
+		if (hcount == vidc_hcr) begin
 			hcount <= 0;
-			if (vcount < vidc_vcr) begin
-				vcount <= vcount + 1'd1;
-			end else begin
-				// vertical refresh time
+			hcursor <= 0;
+			hsync <= 1;
+
+			vcount <= vcount + 1'd1;
+			if (vcount == vidc_vbsr) vborder <= 1;
+			if (vcount == vidc_vber) vborder <= 0;
+			if (vcount == vidc_vdsr) vdisplay <= 1;
+			if (vcount == vidc_vder) begin
+				vdisplay <= 0;
+				vflyback <= 1;
+			end
+			if (vcount == vidc_vcsr) vcursor <= 1;
+			if (vcount == vidc_vcer) vcursor <= 0;
+			if (vcount == vidc_vswr) begin
+				vsync <= 0;
+				vflyback <= 0;
+			end
+
+			if (vcount == vidc_vcr) begin
 				vcount <= 0;
+				vflyback <= 1; // turn vflayback on even if vder is crazy-programmed
+				vsync <= 1;
 			end
 		end
+
 	end
 end
-
 
 endmodule

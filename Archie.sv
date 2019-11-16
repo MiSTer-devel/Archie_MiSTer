@@ -210,6 +210,8 @@ wire [31:0] img_size;
 wire        img_readonly;
 wire [15:0] sdram_sz;
 
+wire [21:0] gamma_bus;
+
 hps_io #(.STRLEN($size(CONF_STR)>>3), .WIDE(1), .VDNUM(2)) hps_io
 (
 	.clk_sys(clk_sys),
@@ -224,6 +226,7 @@ hps_io #(.STRLEN($size(CONF_STR)>>3), .WIDE(1), .VDNUM(2)) hps_io
 	.status(status),
 	.new_vmode(new_vmode),
 	.sdram_sz(sdram_sz),
+	.gamma_bus(gamma_bus),
 
 	.RTC(RTC),
 
@@ -256,17 +259,7 @@ assign AUDIO_S = 1;
 assign AUDIO_MIX = status[3:2];
 
 wire [3:0]	core_r, core_g, core_b;
-wire			core_hs, core_vs;
-
-assign CLK_VIDEO = clk_sys;
-assign CE_PIXEL  = cepix;
-assign VGA_R  = {core_r,core_r};
-assign VGA_G  = {core_g,core_g};
-assign VGA_B  = {core_b,core_b};
-assign VGA_HS = ~core_hs;
-assign VGA_VS = ~core_vs;
-assign VGA_F1 = 0;
-assign VGA_SL = 0;
+wire			core_hs, core_vs, core_de;
 
 wire			core_ack_in;
 wire			core_stb_out;
@@ -316,7 +309,7 @@ archimedes_top #(CLKSYS) ARCHIMEDES
 	.VIDEO_R		( core_r				),
 	.VIDEO_G		( core_g				),
 	.VIDEO_B		( core_b				),
-	.VIDEO_EN   ( VGA_DE          ),
+	.VIDEO_EN   ( core_de         ),
 
 	.AUDIO_L		( AUDIO_L			),
 	.AUDIO_R		( AUDIO_R			),
@@ -400,6 +393,29 @@ always @(posedge CLK_VIDEO) begin
 
 	vclk <= vclk1;
 end
+
+assign CLK_VIDEO = clk_sys;
+assign CE_PIXEL  = cepix;
+assign VGA_F1 = 0;
+assign VGA_SL = 0;
+
+gamma_fast gamma
+(
+	.clk_vid(CLK_VIDEO),
+	.ce_pix(CE_PIXEL),
+
+	.gamma_bus(gamma_bus),
+
+	.HSync(~core_hs),
+	.VSync(~core_vs),
+	.DE(core_de),
+	.RGB_in({core_r,core_r,core_g,core_g,core_b,core_b}),
+
+	.HSync_out(VGA_HS),
+	.VSync_out(VGA_VS),
+	.DE_out(VGA_DE),
+	.RGB_out({VGA_R,VGA_G,VGA_B})
+);
 
 reg new_vmode;
 always @(posedge CLK_VIDEO) begin

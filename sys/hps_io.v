@@ -179,10 +179,6 @@ reg        gamma_wr;
 reg  [9:0] gamma_wr_addr;
 reg  [7:0] gamma_value;
 
-reg [31:0] ps2_key_raw = 0;
-wire       pressed  = (ps2_key_raw[15:8] != 8'hf0);
-wire       extended = (~pressed ? (ps2_key_raw[23:16] == 8'he0) : (ps2_key_raw[15:8] == 8'he0));
-
 reg  [9:0] byte_cnt;
 
 always@(posedge clk_sys) begin

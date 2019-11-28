@@ -154,28 +154,8 @@ pll pll
 (
 	.refclk(CLK_50M),
 	.outclk_0(clk_mem),
-	.outclk_1(SDRAM_CLK),
-	.outclk_2(clk_sys),
-	.locked(pll_ready),
-
-	.phase_en(phase_en),
-	.scanclk(clk_sys),
-	.updn(updn),
-	.cntsel(1),
-	.phase_done(phase_done)
-);
-
-wire phase_en, updn, phase_done;
-phase_shift #(.M64MB(-4), .M128MB(-13)) phase_shift
-(
-	.clk(clk_sys),
-	.pll_locked(pll_ready),
-
-	.phase_en(phase_en),
-	.updn(updn),
-	.phase_done(phase_done),
-
-	.sdram_sz(sdram_sz)
+	.outclk_1(clk_sys),
+	.locked(pll_ready)
 );
 
 //////////////////   HPS I/O   ///////////////////
@@ -208,7 +188,6 @@ wire        sd_buff_wr;
 wire  [1:0] img_mounted;
 wire [31:0] img_size;
 wire        img_readonly;
-wire [15:0] sdram_sz;
 
 wire [21:0] gamma_bus;
 
@@ -225,7 +204,6 @@ hps_io #(.STRLEN($size(CONF_STR)>>3), .WIDE(1), .VDNUM(2)) hps_io
 	.buttons(buttons),
 	.status(status),
 	.new_vmode(new_vmode),
-	.sdram_sz(sdram_sz),
 	.gamma_bus(gamma_bus),
 
 	.RTC(RTC),
@@ -475,6 +453,7 @@ sdram SDRAM
 	.sd_clk		(clk_mem	 ),
 	.sd_rst		(~pll_ready	 ),
 
+	.sd_clk_out (SDRAM_CLK   ),
 	.sd_cke		(SDRAM_CKE	 ),
 	.sd_dq   	(SDRAM_DQ  	 ),
 	.sd_addr 	(SDRAM_A     ),

@@ -28,18 +28,19 @@
 module sdram
 (
 	// interface to the MT48LC16M16 chip
-	input            sd_clk,		// sdram is accessed at 128MHz
-	input            sd_rst,		// reset the sdram controller.
-	output           sd_cke,		// clock enable.
-	inout  reg[15:0] sd_dq,		// 16 bit bidirectional data bus
-	output reg[12:0] sd_addr,	// 13 bit multiplexed address bus
-	output    [1:0]  sd_dqm,	// two byte masks
-	output reg[1:0]  sd_ba,		// two banks
-	output           sd_cs_n,	// a single chip select
-	output           sd_we_n,	// write enable
-	output           sd_ras_n,	// row address select
-	output           sd_cas_n,	// columns address select
-	output reg       sd_ready,	// sd ready.
+	input            sd_clk,	  // sdram is accessed at 128MHz
+	input            sd_rst,	  // reset the sdram controller.
+	output           sd_cke,	  // clock enable.
+	inout  reg[15:0] sd_dq,		  // 16 bit bidirectional data bus
+	output reg[12:0] sd_addr,	  // 13 bit multiplexed address bus
+	output    [1:0]  sd_dqm,	  // two byte masks
+	output reg[1:0]  sd_ba,		  // two banks
+	output           sd_cs_n,	  // a single chip select
+	output           sd_we_n,	  // write enable
+	output           sd_ras_n,	  // row address select
+	output           sd_cas_n,	  // columns address select
+	output reg       sd_ready,	  // sd ready.
+	output           sd_clk_out,
 
 	// cpu/chipset interface
 
@@ -286,5 +287,30 @@ assign sd_cas_n = sd_cmd[1];
 assign sd_we_n  = sd_cmd[0];
 assign sd_cke   = 1'b1;
 assign sd_dqm   = sd_addr[12:11];
+
+altddio_out
+#(
+	.extend_oe_disable("OFF"),
+	.intended_device_family("Cyclone V"),
+	.invert_output("OFF"),
+	.lpm_hint("UNUSED"),
+	.lpm_type("altddio_out"),
+	.oe_reg("UNREGISTERED"),
+	.power_up_high("OFF"),
+	.width(1)
+)
+sdramclk_ddr
+(
+	.datain_h(1'b0),
+	.datain_l(1'b1),
+	.outclock(sd_clk),
+	.dataout(sd_clk_out),
+	.aclr(1'b0),
+	.aset(1'b0),
+	.oe(1'b1),
+	.outclocken(1'b1),
+	.sclr(1'b0),
+	.sset(1'b0)
+);
 
 endmodule

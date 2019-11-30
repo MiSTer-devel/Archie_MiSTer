@@ -170,7 +170,15 @@ always @(posedge sd_clk) begin
 			sd_refresh <= sd_refresh + 9'd1;
 			if(word) begin
 				word <= word + 1'd1;
-				sd_dat[word[2:1]][{word[0],4'b0000} +:16] <= sd_dq_reg;
+				case(word)
+					1: sd_dat[0][31:16] <= sd_dq_reg;
+					2: sd_dat[1][15:00] <= sd_dq_reg;
+					3: sd_dat[1][31:16] <= sd_dq_reg;
+					4: sd_dat[2][15:00] <= sd_dq_reg;
+					5: sd_dat[2][31:16] <= sd_dq_reg;
+					6: sd_dat[3][15:00] <= sd_dq_reg;
+					7: sd_dat[3][31:16] <= sd_dq_reg;
+				endcase
 			end
 
 			// this is the auto refresh code.

@@ -165,11 +165,11 @@ wire led_locked;
 assign LED = (led_overtake & led_state) | (~led_overtake & {1'b0,led_locked,1'b0, ~led_p, 1'b0, ~led_d, 1'b0, ~led_u});
 
 wire btn_r, btn_o, btn_u;
-		`ifdef DUAL_SDRAM
+`ifdef DUAL_SDRAM
 	assign {btn_r,btn_o,btn_u} = {mcp_btn[1],mcp_btn[2],mcp_btn[0]};
-		`else
+`else
 	assign {btn_r,btn_o,btn_u} = ~{BTN_RESET,BTN_OSD,BTN_USER} | {mcp_btn[1],mcp_btn[2],mcp_btn[0]};
-		`endif
+`endif
 
 wire [2:0] mcp_btn;
 wire       mcp_sdcd;
@@ -205,7 +205,6 @@ always @(posedge FPGA_CLK2_50) begin
 		if(!deb_osd) btn_osd <= 0;
 	end
 end
-
 
 /////////////////////////  HPS I/O  /////////////////////////////////////
 
@@ -247,7 +246,11 @@ always @(posedge clk_sys) begin
 	gp_outd <= gp_out;
 end
 
-wire  [7:0] core_type  = 'hA6; // A6 - Archie.
+`ifdef DUAL_SDRAM
+	wire  [7:0] core_type  = 'hA8; // generic core, dual SDRAM.
+`else
+	wire  [7:0] core_type  = 'hA4; // generic core.
+`endif
 
 // HPS will not communicate to core if magic is different
 wire [31:0] core_magic = {24'h5CA623, core_type};
@@ -272,7 +275,7 @@ wire       ypbpr_en     = cfg[5];
 wire       io_osd_vga   = io_ss1 & ~io_ss2;
 `ifndef DUAL_SDRAM
 	wire    sog          = cfg[9];
-	wire    vga_scaler   = 1; // cfg[2];
+	wire    vga_scaler   = cfg[2];
 `endif
 
 reg        cfg_custom_t = 0;
@@ -789,7 +792,6 @@ hdmi_config hdmi_config
 	.limited(hdmi_limited),
 	.ypbpr(ypbpr_en & direct_video)
 );
-
 
 wire [23:0] hdmi_data_sl;
 wire        hdmi_de_sl, hdmi_vs_sl, hdmi_hs_sl;

@@ -146,9 +146,8 @@ always @(posedge sd_clk) begin
 			if (!t) begin 
 
 				if(reset == 13) begin
-					$display("precharging all banks");
 					sd_cmd 		<= CMD_PRECHARGE;
-					sd_addr[10] <= 1'b1;      // precharge all banks
+					sd_addr[10] <= 1;      // precharge all banks
 				end
 
 				if(reset == 2) begin
@@ -157,7 +156,6 @@ always @(posedge sd_clk) begin
 				end
 
 				if(reset == 1) begin
-					$display("loading mode");
 					sd_cmd 		<= CMD_LOAD_MODE;
 					sd_addr		<= MODE;
 				end
@@ -289,11 +287,11 @@ always @(posedge wb_clk) begin
 end
 
 // drive control signals according to current command
-assign sd_cs_n  = sd_cmd[3];
+assign sd_cke   = 1;
+assign sd_cs_n  = 0;
 assign sd_ras_n = sd_cmd[2];
 assign sd_cas_n = sd_cmd[1];
 assign sd_we_n  = sd_cmd[0];
-assign sd_cke   = 1'b1;
 assign sd_dqm   = sd_addr[12:11];
 
 altddio_out

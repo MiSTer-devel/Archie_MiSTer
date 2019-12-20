@@ -1,5 +1,5 @@
 set_global_assignment -name QIP_FILE amber/amber.qip
-set_global_assignment -name QIP_FILE sdram.qip
+set_global_assignment -name VERILOG_FILE sdram.v
 set_global_assignment -name VERILOG_FILE vidc_audio.v
 set_global_assignment -name VERILOG_FILE vidc_dmachannel.v
 set_global_assignment -name VERILOG_FILE vidc_fifo.v

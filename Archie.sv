@@ -208,11 +208,6 @@ hps_io #(.STRLEN($size(CONF_STR)>>3), .WIDE(1), .VDNUM(2)) hps_io
 
 	.RTC(RTC),
 
-	.kbd_out_data(kbd_out_data),
-	.kbd_out_strobe(kbd_out_strobe),
-	.kbd_in_data(kbd_in_data),
-	.kbd_in_strobe(kbd_in_strobe),
-
 	.ioctl_index(ioctl_index),
 	.ioctl_download(ioctl_download),
 	.ioctl_addr(ioctl_addr),
@@ -230,8 +225,13 @@ hps_io #(.STRLEN($size(CONF_STR)>>3), .WIDE(1), .VDNUM(2)) hps_io
 	.sd_buff_wr(sd_buff_wr),
 	.img_mounted(img_mounted),
 	.img_size(img_size),
-	.img_readonly(img_readonly)
+	.img_readonly(img_readonly),
+
+	.EXT_BUS(EXT_BUS)
 );
+
+wire [35:0] EXT_BUS;
+hps_ext hps_ext(.*);
 
 assign AUDIO_S = 1;
 assign AUDIO_MIX = status[3:2];

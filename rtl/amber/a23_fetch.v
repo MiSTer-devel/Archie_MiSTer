@@ -45,6 +45,7 @@
 module a23_fetch
 (
 input                       i_clk,
+input                       i_reset,
 
 input       [31:0]          i_address,
 input                       i_address_valid,
@@ -90,6 +91,8 @@ wire                        sel_wb;
 wire                        cache_wb_req;
 wire                        address_cachable;
 
+wire                        wb_abort;
+
 // ======================================
 // Memory Decode
 // ======================================
@@ -117,6 +120,7 @@ assign o_fetch_abort     =  wb_abort;
 // ======================================
 a23_cache u_cache (
     .i_clk                      ( i_clk                 ),
+    .i_reset                    ( i_reset               ),
      
     .i_select                   ( sel_cache             ),
     .i_exclusive                ( i_exclusive           ),
@@ -137,15 +141,13 @@ a23_cache u_cache (
     .i_wb_stall                 ( o_wb_stb & ~i_wb_ack  )
 );
 
-
-wire wb_abort;
-
 // ======================================
 //  Wishbone Master I/F
 // ======================================
 a23_wishbone u_wishbone (
     // CPU Side
     .i_clk                      ( i_clk                 ),
+    .i_reset                    ( i_reset               ),
     
     // Core Accesses to Wishbone bus
     .i_select                   ( sel_wb                ),

@@ -39,9 +39,6 @@ module floppy (
 // Default: 8 MHz
 parameter SYS_CLK = 8000000;
 
-assign sector_hdr = (sec_state == SECTOR_STATE_HDR);
-assign sector_data = (sec_state == SECTOR_STATE_DATA);
-   
 // a standard DD floppy has a data rate of 250kBit/s and rotates at 300RPM
 localparam RATE = 250000;
 localparam RPM = 300;
@@ -56,12 +53,56 @@ localparam TRACKS = 85;            // max allowed track
 localparam SECTOR_LEN = 1024;      // Default sector size is 1k on Archie ...
 localparam SPT = 5;                // ... with 5 sectors per track
 localparam SECTOR_BASE = 0;        // number of first sector on track (archie 0, dos 1)
-   
+
 // number of physical bytes per track
 localparam BPT = RATE*60/(8*RPM);
 
+// track has BPT bytes
+// SPT sectors are stored on the track
+localparam SECTOR_GAP_LEN = BPT/SPT - (SECTOR_LEN + SECTOR_HDR_LEN);
+
+reg [1:0] sec_state;
+reg [9:0] sec_byte_cnt;  // counting bytes within sectors
+reg [3:0] current_sector = SECTOR_BASE[3:0];
+
+assign sector = current_sector;
+   
+localparam SECTOR_STATE_GAP  = 2'd0;
+localparam SECTOR_STATE_HDR  = 2'd1;
+localparam SECTOR_STATE_DATA = 2'd2;
+
+// we simulate an interleave of 1
+reg [3:0] start_sector = SECTOR_BASE[3:0];
+
+assign sector_hdr = (sec_state == SECTOR_STATE_HDR);
+assign sector_data = (sec_state == SECTOR_STATE_DATA);
+
+// data rate determines rotation speed
+reg [31:0] rate = 0;
+reg motor_onD;
+
+localparam STEP_BUSY_CLKS = (SYS_CLK/1000)*STEPBUSY;  // steprate is in ms
+
+reg [6:0] current_track = 7'd0;
+assign track = current_track;
+
+reg step_inD;
+reg step_outD;
+reg [19:0] step_busy;
+
 // report disk ready if it spins at full speed and head is not moving
 assign ready = select && (rate == RATE) && (step_busy == 0);
+
+reg data_clk;
+reg data_clk_en;
+reg [31:0] clk_cnt;
+
+// byte clock
+reg [14:0] byte_cnt;
+reg 	   index_pulse_start;
+reg byte_clk_en;
+assign dclk_en = byte_clk_en;
+reg [2:0] clk_cnt2;
    
 // ================================================================
 // ========================= INDEX PULSE ==========================
@@ -84,15 +125,6 @@ end
 // ================================================================
 // ======================= track handling =========================
 // ================================================================
-
-localparam STEP_BUSY_CLKS = (SYS_CLK/1000)*STEPBUSY;  // steprate is in ms
-
-assign track = current_track;
-reg [6:0] current_track = 7'd0;
-
-reg step_inD;
-reg step_outD;
-reg [19:0] step_busy;
    
 always @(posedge clk) begin
    step_inD <= step_in;
@@ -118,23 +150,6 @@ end
 // ================================================================
 // ====================== sector handling =========================
 // ================================================================
-
-// track has BPT bytes
-// SPT sectors are stored on the track
-localparam SECTOR_GAP_LEN = BPT/SPT - (SECTOR_LEN + SECTOR_HDR_LEN);
-
-assign sector = current_sector;
-   
-localparam SECTOR_STATE_GAP  = 2'd0;
-localparam SECTOR_STATE_HDR  = 2'd1;
-localparam SECTOR_STATE_DATA = 2'd2;
-
-// we simulate an interleave of 1
-reg [3:0] start_sector = SECTOR_BASE[3:0];
-   
-reg [1:0] sec_state;
-reg [9:0] sec_byte_cnt;  // counting bytes within sectors
-reg [3:0] current_sector = SECTOR_BASE[3:0];
   
 always @(posedge clk) begin
 	if (byte_clk_en) begin
@@ -181,8 +196,6 @@ end
 
 // An ed floppy at 300rpm with 1MBit/s has max 31.250 bytes/track
 // thus we need to support up to 31250 events
-reg [14:0] byte_cnt;
-reg 	   index_pulse_start;
 always @(posedge clk) begin
 	if (byte_clk_en) begin
 		index_pulse_start <= 1'b0;
@@ -197,9 +210,6 @@ end
 
 // Make byte clock from bit clock.
 // When a DD disk spins at 300RPM every 32us a byte passes the disk head
-assign dclk_en = byte_clk_en;
-reg byte_clk_en;
-reg [2:0] clk_cnt2;
 always @(posedge clk) begin
 	byte_clk_en <= 0;
 	if (data_clk_en) begin
@@ -220,10 +230,6 @@ reg [31:0] spin_up_counter;
    
 // internal motor on signal that is only true if the drive is selected
 wire motor_on_sel = motor_on && select;
-   
-// data rate determines rotation speed
-reg [31:0] rate = 0;
-reg motor_onD;
 
 always @(posedge clk) begin
    motor_onD <= motor_on_sel;
@@ -255,9 +261,6 @@ end
 // Generate a data clock from the system clock. This depends on motor
 // speed and reaches the full rate when the disk rotates at 300RPM. No
 // valid data can be read until the disk has reached it's full speed.
-reg data_clk;
-reg data_clk_en;
-reg [31:0] clk_cnt;
 always @(posedge clk) begin
    data_clk_en <= 0;
    if(clk_cnt + rate > SYS_CLK/2) begin

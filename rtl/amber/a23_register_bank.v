@@ -44,6 +44,7 @@
 module a23_register_bank (
 
 input                       i_clk,
+input                       i_reset,
 input                       i_fetch_stall,
 
 input       [1:0]           i_mode_idec,            // user, supervisor, irq_idec, firq_idec etc.
@@ -171,7 +172,36 @@ assign firq_exec = i_mode_exec == FIRQ;
 // Register Update
 // ========================================================
 always @ ( posedge i_clk )
-    if (!i_fetch_stall)
+    if (i_reset) begin
+        r0       <= 32'hdead_beef;
+        r1       <= 32'hdead_beef;
+        r2       <= 32'hdead_beef;
+        r3       <= 32'hdead_beef;
+        r4       <= 32'hdead_beef;
+        r5       <= 32'hdead_beef;
+        r6       <= 32'hdead_beef;
+        r7       <= 32'hdead_beef;
+        r8       <= 32'hdead_beef;
+        r9       <= 32'hdead_beef;
+        r10      <= 32'hdead_beef;
+        r11      <= 32'hdead_beef;
+        r12      <= 32'hdead_beef;
+        r8_firq  <= 32'hdead_beef;
+        r9_firq  <= 32'hdead_beef;
+        r10_firq <= 32'hdead_beef;
+        r11_firq <= 32'hdead_beef;
+        r12_firq <= 32'hdead_beef;
+        r13      <= 32'hdead_beef;
+        r14      <= 32'hdead_beef;
+        r13_svc  <= 32'hdead_beef;
+        r14_svc  <= 32'hdead_beef;
+        r13_irq  <= 32'hdead_beef;
+        r14_irq  <= 32'hdead_beef;
+        r13_firq <= 32'hdead_beef;
+        r14_firq <= 32'hdead_beef;
+        r15      <= 24'h00_0000;
+    
+    end else if (!i_fetch_stall)
         begin
         r0       <=  i_reg_bank_wen[0 ]              ? i_reg : r0;  
         r1       <=  i_reg_bank_wen[1 ]              ? i_reg : r1;  
@@ -368,6 +398,32 @@ assign o_rn = i_rn_sel == 4'd0  ? r0_out  :
               i_rn_sel == 4'd14 ? r14_out : 
                                   r15_out_rn ; 
 
+
+// synthesis translate_off
+cpu_export cpu_export_inst(
+    .clk                (i_clk),
+    .rst                (i_reset),
+    .new_export         (1'b1),
+    //.commandcount       (),
+           
+    .R0                 (r0 ),
+    .R1                 (r1 ),
+    .R2                 (r2 ),
+    .R3                 (r3 ),
+    .R4                 (r4 ),
+    .R5                 (r5 ),
+    .R6                 (r6 ),
+    .R7                 (r7 ),
+    .R8                 (r8 ),
+    .R9                 (r9 ),
+    .R10                (r10),
+    .R11                (r11),
+    .R12                (r12),
+    .R13                (r13),
+    .R14                (r14),
+    .R15                ({ 8'd0 , r15 })
+);
+// synthesis translate_on
 
 endmodule
 

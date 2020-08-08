@@ -58,6 +58,7 @@
 module a23_wishbone
 (
 input                       i_clk,
+input                       i_reset,
 
 // Core Accesses to Wishbone bus
 input                       i_select,
@@ -171,6 +172,15 @@ assign wait_write_ack = o_wb_stb && o_wb_we && !i_wb_ack;
 
 
 always @( posedge i_clk )
+   if (i_reset) begin
+      wishbone_st <= WB_IDLE;
+      o_wb_adr    <= 32'd0;
+      o_wb_sel    <= 4'd0;
+      o_wb_we     <= 1'd0;
+      o_wb_cyc    <= 1'd0;
+      o_wb_stb    <= 1'd0;
+      o_wb_tga    <= 1'b0;
+   end else
     case ( wishbone_st )
         WB_IDLE :
             begin 
@@ -306,16 +316,5 @@ assign xAS_STATE  = wishbone_st == WB_IDLE       ? "WB_IDLE"       :
 
 //synopsys translate_on
     
-initial begin
-
-    o_wb_adr = 32'd0;
-    o_wb_sel = 4'd0;
-    o_wb_we  = 1'd0;
-    o_wb_dat = 32'd0;
-    o_wb_cyc = 1'd0;
-    o_wb_stb = 1'd0;
-    o_wb_tga = 1'b0;
-
-end
 endmodule
 

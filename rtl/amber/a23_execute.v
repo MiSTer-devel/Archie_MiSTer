@@ -46,6 +46,7 @@
 module a23_execute (
 
 input                       i_clk,
+input                       i_reset,
 input       [31:0]          i_read_data,
 input       [4:0]           i_read_data_alignment,  // 2 LSBs of address in [4:3], appended 
                                                     // with 3 zeros
@@ -452,28 +453,43 @@ assign status_bits_mode_nr             =  status_bits_mode_update        ? statu
                                                                            status_bits_mode         ;
 
 always @( posedge i_clk )
-    begin                                                                                                             
-    o_priviledged           <= priviledged_update             ? priviledged_nxt              : o_priviledged;
-    o_exclusive             <= exclusive_update               ? i_exclusive_exec             : o_exclusive;
-    o_data_access           <= data_access_update             ? i_data_access_exec           : o_data_access;
-    o_write_enable          <= write_enable_update            ? write_enable_nxt             : o_write_enable;
-    o_write_data            <= write_data_update              ? write_data_nxt               : o_write_data; 
-    o_address               <= address_update                 ? o_address_nxt                : o_address;    
-    o_adex                  <= address_update                 ? adex_nxt                     : o_adex;    
-    o_address_valid         <= address_update                 ? 1'd1                         : o_address_valid;
-    o_translate             <= translate_update               ? ~i_writeback_sel & (status_bits_mode  != USR) : o_translate;
-    o_byte_enable           <= byte_enable_update             ? byte_enable_nxt              : o_byte_enable;
-    o_copro_write_data      <= copro_write_data_update        ? write_data_nxt               : o_copro_write_data; 
-
-    base_address            <= base_address_update            ? rn                           : base_address;    
-
-    status_bits_flags       <= status_bits_flags_update       ? status_bits_flags_nxt        : status_bits_flags;
-    status_bits_mode        <=  status_bits_mode_nr;
-    status_bits_mode_rds_oh <= status_bits_mode_rds_oh_update ? status_bits_mode_rds_oh_nxt  : status_bits_mode_rds_oh;
-    status_bits_mode_rds    <= status_bits_mode_rds_nr;
-    status_bits_irq_mask    <= status_bits_irq_mask_update    ? status_bits_irq_mask_nxt     : status_bits_irq_mask;
-    status_bits_firq_mask   <= status_bits_firq_mask_update   ? status_bits_firq_mask_nxt    : status_bits_firq_mask;
+begin              
+    
+    if (i_reset) begin
+        o_copro_write_data <= 32'd0;
+        o_write_data <= 32'd0;
+        o_address <= 32'hdead_dead;
+        o_adex <= 1'd0;           // Address Exception
+        o_address_valid <= 1'd0;  // Prevents the reset address value being a
+        o_priviledged <= 1'd0;    // Priviledged access
+        o_exclusive <= 1'd0;      // swap access
+        o_write_enable <= 1'd0;
+        o_translate <= 1'd0;
+        o_byte_enable <= 4'd0;
+        o_data_access <= 1'd0;    // To Fetch stage. high = data fetch;
+    end else begin
+        o_priviledged           <= priviledged_update             ? priviledged_nxt              : o_priviledged;
+        o_exclusive             <= exclusive_update               ? i_exclusive_exec             : o_exclusive;
+        o_data_access           <= data_access_update             ? i_data_access_exec           : o_data_access;
+        o_write_enable          <= write_enable_update            ? write_enable_nxt             : o_write_enable;
+        o_write_data            <= write_data_update              ? write_data_nxt               : o_write_data; 
+        o_address               <= address_update                 ? o_address_nxt                : o_address;    
+        o_adex                  <= address_update                 ? adex_nxt                     : o_adex;    
+        o_address_valid         <= address_update                 ? 1'd1                         : o_address_valid;
+        o_translate             <= translate_update               ? ~i_writeback_sel & (status_bits_mode  != USR) : o_translate;
+        o_byte_enable           <= byte_enable_update             ? byte_enable_nxt              : o_byte_enable;
+        o_copro_write_data      <= copro_write_data_update        ? write_data_nxt               : o_copro_write_data; 
+     
+        base_address            <= base_address_update            ? rn                           : base_address;    
+     
+        status_bits_flags       <= status_bits_flags_update       ? status_bits_flags_nxt        : status_bits_flags;
+        status_bits_mode        <=  status_bits_mode_nr;
+        status_bits_mode_rds_oh <= status_bits_mode_rds_oh_update ? status_bits_mode_rds_oh_nxt  : status_bits_mode_rds_oh;
+        status_bits_mode_rds    <= status_bits_mode_rds_nr;
+        status_bits_irq_mask    <= status_bits_irq_mask_update    ? status_bits_irq_mask_nxt     : status_bits_irq_mask;
+        status_bits_firq_mask   <= status_bits_firq_mask_update   ? status_bits_firq_mask_nxt    : status_bits_firq_mask;
     end
+end
 
 
 // ========================================================
@@ -536,7 +552,8 @@ a23_multiply u_multiply (
 `ifndef A23_RAM_REGISTER_BANK
 a23_register_bank u_register_bank(
     .i_clk                   ( i_clk                     ),
-    .i_fetch_stall           ( fetch_stall             ),
+    .i_reset                 ( i_reset                   ),
+    .i_fetch_stall           ( fetch_stall               ),
     .i_rm_sel                ( i_rm_sel                  ),
     .i_rds_sel               ( i_rds_sel                 ),
     .i_rn_sel                ( i_rn_sel                  ),
@@ -627,21 +644,6 @@ assign  xMODE  =  status_bits_mode == SVC  ? "SVC"  :
 
 //synopsys translate_on
 
-initial begin
-
-    o_copro_write_data = 32'd0;
-    o_write_data = 32'd0;
-    o_address = 32'hdead_dead;
-    o_adex = 1'd0;           // Address Exception
-    o_address_valid = 1'd0;  // Prevents the reset address value being a
-    o_priviledged = 1'd0;    // Priviledged access
-    o_exclusive = 1'd0;      // swap access
-    o_write_enable = 1'd0;
-    o_translate = 1'd0;
-    o_byte_enable = 4'd0;
-    o_data_access = 1'd0;    // To Fetch stage. high = data fetch;
-
-end
 endmodule
 
 

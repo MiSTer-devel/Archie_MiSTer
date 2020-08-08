@@ -158,7 +158,7 @@ vidc_dmachannel #(.FIFO_SIZE(2)) CURSORDMA (
 );
 
 
-always @(posedge clkcpu) begin
+always @(posedge clkcpu) begin : block
 	reg old_en;
 	
 	old_en <= snd_sam_en;

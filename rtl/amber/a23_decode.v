@@ -44,6 +44,7 @@
 module a23_decode
 (
 input                       i_clk,
+input                       i_reset,
 input       [31:0]          i_read_data,
 input                       i_fetch_stall,                  // stall all stages of the cpu at the same time
 input                       i_fetch_abort,                  // abort the data transfer (instruction or data).
@@ -1541,7 +1542,52 @@ assign instruction_valid = (control_state == EXECUTE || control_state == PRE_FET
 // Register Update
 // ========================================================
 always @ ( posedge i_clk )
-    if (!i_fetch_stall | i_fetch_abort) 
+    if (i_reset) begin
+      control_state <= RST_WAIT1;
+      
+      o_read_data <= 1'd0;
+      o_read_data_alignment <= 1'd0;  // 2 LSBs of read address used for calculating shift in LDRB ops
+      o_imm32 <= 32'd0;
+      o_imm_shift_amount <= 5'd0;
+      o_shift_imm_zero <= 1'd0;
+      o_condition <= 4'he;             // 4'he = al
+      o_exclusive_exec <= 1'd0;         // exclusive access request ( swap instruction )
+      o_data_access_exec <= 1'd0;       // high means the memory access is a read
+      o_status_bits_mode <= 2'b11;     // SVC
+      o_status_bits_irq_mask <= 1'd1;
+      o_status_bits_firq_mask <= 1'd1;
+      o_rm_sel <= 4'd0;
+      o_rds_sel <= 4'd0;
+      o_rn_sel <= 4'd0;
+      o_barrel_shift_amount_sel <= 2'd0;
+      o_barrel_shift_data_sel <= 2'd0;
+      o_barrel_shift_function <= 2'd0;
+      o_alu_function <= 9'd0;
+      o_use_carry_in <= 1'd0;
+      o_multiply_function <= 2'd0;
+      o_interrupt_vector_sel <= 3'd0;
+      o_address_sel <= 4'd2;
+      o_pc_sel <= 2'd2;
+      o_byte_enable_sel <= 2'd0;        // byte; halfword or word write
+      o_status_bits_sel <= 3'd0;
+      o_write_data_wen <= 1'd0;
+      o_base_address_wen <= 1'd0;       // save LDM base address register
+      o_pc_wen <= 1'd0;
+      o_writeback_sel <= 1'd0; // force supervisor mode off for the memory cycle.
+      o_reg_bank_wen <= 15'd0;
+      o_reg_bank_wsel <= 4'd0;
+      o_status_bits_flags_wen <= 1'd0;
+      o_status_bits_mode_wen <= 1'd0;
+      o_status_bits_irq_mask_wen <= 1'd0;
+      o_status_bits_firq_mask_wen <= 1'd0;
+      o_copro_opcode1 <= 3'd0;
+      o_copro_opcode2 <= 3'd0;
+      o_copro_crn <= 4'd0;
+      o_copro_crm <= 4'd0;
+      o_copro_num <= 4'd0;
+      o_copro_operation <= 2'd0; // 0 = no operation;
+      o_copro_write_data_wen <= 1'd0;
+    end else if (!i_fetch_stall | i_fetch_abort) 
         begin                                                                                                                 
         o_read_data                 <= i_read_data;
         o_read_data_alignment       <= {i_execute_address[1:0], 3'd0};  
@@ -1674,19 +1720,19 @@ assign dabt = dabt_reg || i_dabt;
 
 `include "debug_functions.v"
 
-a23_decompile  u_decompile (
-    .i_clk                      ( i_clk                            ),
-    .i_fetch_stall              ( i_fetch_stall                    ),
-    .i_instruction              ( instruction                      ),
-    .i_instruction_valid        ( instruction_valid                ),
-    .i_instruction_execute      ( instruction_execute              ),
-    .i_instruction_address      ( instruction_address              ),
-    .i_interrupt                ( {3{interrupt}} & next_interrupt  ),
-    .i_interrupt_state          ( control_state == INT_WAIT2       ),
-    .i_instruction_undefined    ( und_request                      ),
-    .i_pc_sel                   ( o_pc_sel                         ),
-    .i_pc_wen                   ( o_pc_wen                         )
-);
+//a23_decompile  u_decompile (
+//    .i_clk                      ( i_clk                            ),
+//    .i_fetch_stall              ( i_fetch_stall                    ),
+//    .i_instruction              ( instruction                      ),
+//    .i_instruction_valid        ( instruction_valid                ),
+//    .i_instruction_execute      ( instruction_execute              ),
+//    .i_instruction_address      ( instruction_address              ),
+//    .i_interrupt                ( {3{interrupt}} & next_interrupt  ),
+//    .i_interrupt_state          ( control_state == INT_WAIT2       ),
+//    .i_instruction_undefined    ( und_request                      ),
+//    .i_pc_sel                   ( o_pc_sel                         ),
+//    .i_pc_wen                   ( o_pc_wen                         )
+//);
 
 
 wire    [(15*8)-1:0]    xCONTROL_STATE;
@@ -1731,52 +1777,4 @@ always @( posedge i_clk )
         end
 //synopsys translate_on
 
-initial begin
-
-    o_read_data = 1'd0;
-    o_read_data_alignment = 1'd0;  // 2 LSBs of read address used for calculating shift in LDRB ops
-    o_imm32 = 32'd0;
-    o_imm_shift_amount = 5'd0;
-    o_shift_imm_zero = 1'd0;
-    o_condition = 4'he;             // 4'he = al
-    o_exclusive_exec = 1'd0;         // exclusive access request ( swap instruction )
-    o_data_access_exec = 1'd0;       // high means the memory access is a read
-    o_status_bits_mode = 2'b11;     // SVC
-    o_status_bits_irq_mask = 1'd1;
-    o_status_bits_firq_mask = 1'd1;
-    o_rm_sel = 4'd0;
-    o_rds_sel = 4'd0;
-    o_rn_sel = 4'd0;
-    o_barrel_shift_amount_sel = 2'd0;
-    o_barrel_shift_data_sel = 2'd0;
-    o_barrel_shift_function = 2'd0;
-    o_alu_function = 9'd0;
-    o_use_carry_in = 1'd0;
-    o_multiply_function = 2'd0;
-    o_interrupt_vector_sel = 3'd0;
-    o_address_sel = 4'd2;
-    o_pc_sel = 2'd2;
-    o_byte_enable_sel = 2'd0;        // byte; halfword or word write
-    o_status_bits_sel = 3'd0;
-    o_write_data_wen = 1'd0;
-    o_base_address_wen = 1'd0;       // save LDM base address register
-    o_pc_wen = 1'd1;
-    o_writeback_sel = 1'd0; // force supervisor mode off for the memory cycle.
-    o_reg_bank_wen = 15'd0;
-    o_reg_bank_wsel = 4'd0;
-    o_status_bits_flags_wen = 1'd0;
-    o_status_bits_mode_wen = 1'd0;
-    o_status_bits_irq_mask_wen = 1'd0;
-    o_status_bits_firq_mask_wen = 1'd0;
-    o_copro_opcode1 = 3'd0;
-    o_copro_opcode2 = 3'd0;
-    o_copro_crn = 4'd0;
-    o_copro_crm = 4'd0;
-    o_copro_num = 4'd0;
-    o_copro_operation = 2'd0; // 0 = no operation;
-    o_copro_write_data_wen = 1'd0;
-
-end
 endmodule
-
-

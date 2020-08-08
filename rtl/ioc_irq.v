@@ -34,6 +34,7 @@
  (
 	
 		input 	 			clkcpu, // cpu bus clock domain
+		input 	 			reset,
 
 		input [7:0]			i,
 		input [7:0]			c,
@@ -55,16 +56,19 @@ wire		selected = ~addr[6] & (addr[5:4] == ADDRESS);
 
 always @(posedge clkcpu) begin
 
-	status <= status & CANCLEAR | status & ~CANCLEAR & ~c | i | PERMBITS;
-	
-	if (selected & write) begin
-		
-		if (addr[3:2] == 2'b10)  mask <= din;
-		
-		if (addr[3:2] == 2'b01) begin
-			status <= (status & ~CANCLEAR) | (status & ~din & CANCLEAR) | PERMBITS;
+	if (reset) begin
+		mask   <= 8'h00;
+		status <= 8'h00;
+	end else begin
+
+		status <= status & CANCLEAR | status & ~CANCLEAR & ~c | i | PERMBITS;
+
+		if (selected & write) begin
+			if (addr[3:2] == 2'b10)  mask <= din;
+			if (addr[3:2] == 2'b01) begin
+				status <= (status & ~CANCLEAR) | (status & ~din & CANCLEAR) | PERMBITS;
+			end
 		end
- 
 	end
 
 end

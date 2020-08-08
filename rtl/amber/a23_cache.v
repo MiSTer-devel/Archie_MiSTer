@@ -82,6 +82,7 @@ parameter WORD_SEL_LSB      =                  2                           // = 
 
 (
 input                               i_clk,
+input                               i_reset,
 
 // Read / Write requests from core
 input                               i_select,
@@ -210,19 +211,14 @@ assign o_stall          = read_stall || write_stall || cache_busy_stall || ex_re
 
 assign o_wb_req        = (( read_miss || write_miss ) && c_state == CS_IDLE ) || 
                           c_state == CS_WRITE_HIT1;
-initial begin 
 
-	c_state = CS_IDLE;
-
-end
-     
 // ======================================
 // Cache State Machine
 // ======================================
 
 // Little State Machine to Flush Tag RAMS
 always @ ( posedge i_clk )
-    if ( i_cache_flush )
+    if ( i_reset || i_cache_flush )
         begin
         c_state     <= CS_INIT;
         source_sel  <= 1'd1 << C_INIT;

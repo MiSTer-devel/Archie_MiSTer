@@ -43,6 +43,7 @@
 module a23_core
 (
 	input                       i_clk,
+	input                       i_reset,
 	
 	input                       i_irq,              // Interrupt request, active high
 	input                       i_firq,             // Fast Interrupt request, active high
@@ -162,6 +163,7 @@ assign decode_fault         = dabt_trigger | iabt_trigger;
 
 a23_fetch u_fetch (
     .i_clk                              ( i_clk                             ),
+    .i_reset                            ( i_reset                           ),
 
     .i_address                          ( execute_address[31:0]     			 ),
     .i_address_valid                    ( execute_address_valid             ), 
@@ -197,6 +199,7 @@ a23_fetch u_fetch (
 
 a23_decode u_decode (
     .i_clk                              ( i_clk                             ),
+    .i_reset                            ( i_reset                           ),
     
     // Instruction fetch or data read signals
     .i_read_data                        ( read_data                         ),                                          
@@ -276,6 +279,7 @@ a23_decode u_decode (
 
 a23_execute u_execute (
     .i_clk                              ( i_clk                             ),
+    .i_reset                            ( i_reset                           ),
     
     .i_read_data                        ( read_data_s2                      ),
     .i_read_data_alignment              ( read_data_alignment               ), 
@@ -345,6 +349,7 @@ a23_execute u_execute (
 
 a23_coprocessor u_coprocessor (
     .i_clk                              ( i_clk                             ),
+    .i_reset                            ( i_reset                           ),
     
     .i_fetch_stall                      ( fetch_stall                       ),
     .i_copro_opcode1                    ( copro_opcode1                     ),

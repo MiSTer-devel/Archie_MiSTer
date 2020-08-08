@@ -51,7 +51,7 @@ localparam  SOUND_SAMFREQ   = 4'b1100;
 localparam  SOUND_REGISTERS = 5'b01100;   
 
 reg [2:0] channel;
-reg [2:0] vidc_sir[8];
+reg [2:0] vidc_sir[0:7];
 reg [8:0] vidc_sfr;
 
 // 1mhz pulse counter.
@@ -85,7 +85,7 @@ function [15:0] mu2lin;
 endfunction
 
 
-always @(posedge aud_clk) begin
+always @(posedge aud_clk) begin : block
 	reg [15:0] data,al,ar;
 	reg ce_d;
 

@@ -144,41 +144,31 @@ memc_translator PAGETABLES(
 	.addr_o		( phys_address	),
 	.valid		( table_valid 	)
 );
-   
-initial begin 
 
-   // start with rom overlay 
-   rom_overlay = 1'b1;
-
-   // memc state registers
-   vid_load = 1'b0;
-   snd_load = 1'b0;
-   cur_load = 1'b0;
-   cpu_load = 1'b0;
-   
-   // sound init.
-   snd_next_valid = 1'b0;
-   dma_request_r = 1'b0;
-   // video init.
-   dma_ack_r = 4'd0;
-
-   // initial cursor and video addresses
-   vid_init  = INITIAL_SCREEN_BASE;
-   cur_init  = INITIAL_CURSOR_BASE;
-
-   vid_start = INITIAL_SCREEN_BASE;
-   vid_end   = INITIAL_SCREEN_BASE + INITIAL_SCREEN_SIZE;
-   
-end
-
-reg [31:0] cache_data[4];
+reg [31:0] cache_data[0:3];
 reg        cache_valid;
 reg [23:4] cache_addr;
 reg        cache_ack;
 
+wire   logcs		= cpu_address[25] == 1'b0; // 0000000-&1FFFFFF
+
+wire [21:2] ram_page = 	memc_control[3:2] == 2'b00 ? {3'd0, cpu_address[18:2]}:
+								memc_control[3:2] == 2'b01 ? {2'd0, cpu_address[19:2]} :
+								memc_control[3:2] ==	2'b10 ? {1'd0, cpu_address[20:2]} : cpu_address[21:2];
+  
+
+wire [23:2] caddr = 	phycs			? {2'd0, ram_page}  : // use physical memory
+							romcs 		? {3'b010, cpu_address[20:2]} 	: // use 2mb and up for rom space.  
+							table_valid	& logcs	? phys_address[23:2] : 22'd0; // use logical memory.
+
+
 assign cpu_dout = cache_data[caddr[3:2]];
 
-always @(posedge clkcpu) begin
+wire   cpu_mem_we	= cpu_we & ((phycs & spvmd) | (table_valid & logcs)) & ~romcs;
+wire   memw 		= cpu_load & cpu_cyc & cpu_we & spvmd & (cpu_address[25:21] == 5'b11011); // &3600000
+wire   err			= ~address_valid;
+
+always @(posedge clkcpu) begin : block
 	reg cache_rcv, cache_test;
 	reg [1:0] cache_cnt;
 	reg [1:0] cache_wraddr;
@@ -194,8 +184,11 @@ always @(posedge clkcpu) begin
 		vid_address <= INITIAL_SCREEN_BASE;
 		cur_address <= INITIAL_CURSOR_BASE;
 
+		vid_load = 1'b0;
+		snd_load = 1'b0;
+		cur_load = 1'b0;
 		cpu_load 	<= 1'b0;
-		rom_overlay	<= 1'b1;
+		rom_overlay	<= 1'b1; // start with rom overlay 
 	
 		memc_control[11] <= 1'b0; // disable sound dma on reset.
 
@@ -203,6 +196,10 @@ always @(posedge clkcpu) begin
 		cache_rcv <= 0;
       cache_valid <= 0;
 		cache_test <= 0;
+
+		snd_next_valid = 1'b0;  // sound init.
+
+		dma_ack_r = 4'd0; // video init.
 
 	end else begin 
 
@@ -416,18 +413,10 @@ always @(posedge clkcpu) begin
 
 end
 
-wire [21:2] ram_page = 	memc_control[3:2] == 2'b00 ? {3'd0, cpu_address[18:2]}:
-								memc_control[3:2] == 2'b01 ? {2'd0, cpu_address[19:2]} :
-								memc_control[3:2] ==	2'b10 ? {1'd0, cpu_address[20:2]} : cpu_address[21:2];
-  
 assign mem_addr_o = 	vid_load		? {5'd0, vid_address[18:2]}	:
 							cur_load		? {5'd0, cur_address[18:2]} :
 							snd_load		? {5'd0, snd_sptr[18:2]} :
 							caddr;
-
-wire [23:2] caddr = 	phycs			? {2'd0, ram_page}  : // use physical memory
-							romcs 		? {3'b010, cpu_address[20:2]} 	: // use 2mb and up for rom space.  
-							table_valid	& logcs	? phys_address[23:2] : 22'd0; // use logical memory.
 
 // does this cpu cycle need to go to external RAM/ROM?
 //assign cpu_ram_cycle = cpu_cyc & cpu_stb & (table_valid | phycs | romcs); 
@@ -438,23 +427,20 @@ assign mem_sel_o	= cpu_load ? cpu_sel    : 4'b1111;
 assign mem_we_o	= cpu_load ? cpu_mem_we : 1'b0;
 assign mem_cti_o	= 3'b010;                   
 
-wire   cpu_mem_we	= cpu_we & ((phycs & spvmd) | (table_valid & logcs)) & ~romcs;
+wire   vidc_cs		= spvmd & (cpu_address[25:21] == 5'b11010); // &3400000 - &35FFFFF (WE & SPVMD)
 
 assign address_valid = (logcs & table_valid) | rom_low_cs| ioc_cs | memw | tablew | vidc_cs | (phycs & ~cpu_we) | (phycs & spvmd & cpu_we) | romcs; 
-wire   err			= ~address_valid;
 
 assign cpu_ack		= (mem_we_o ? mem_ack_i : cache_ack) & ~err;
 assign cpu_err		= cpu_load ? mem_ack_i & err : 1'b0;
 
 assign tablew 		= cpu_load & cpu_cyc & cpu_we & spvmd & (cpu_address[25:23] == 3'b111) & (cpu_address[12] == 0) & (cpu_address[7] == 0); // &3800000+ 
-wire   memw 		= cpu_load & cpu_cyc & cpu_we & spvmd & (cpu_address[25:21] == 5'b11011); // &3600000
+
 assign vidw  		= cpu_load & cpu_cyc & cpu_we & vidc_cs; // &3400000
 
 // bus chip selects
-wire   logcs		= cpu_address[25] == 1'b0; // 0000000-&1FFFFFF
 assign phycs		= cpu_address[25:24] == 2'b10;  //&2000000 - &2FFFFFF
 assign ioc_cs		= spvmd & (cpu_address[25:22] == 4'b1100); //&3000000 - &33FFFFF
-wire   vidc_cs		= spvmd & (cpu_address[25:21] == 5'b11010); // &3400000 - &35FFFFF (WE & SPVMD)
 assign rom_low_cs = (cpu_address[25:22] == 4'b1101); 
 
 assign romcs  		= ((cpu_address[25:23] == 3'b111) | (cpu_address[25:19] == 7'h00) & rom_overlay);

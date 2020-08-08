@@ -114,6 +114,7 @@ wire ir_edge;
 	) IRQA
    (
 		.clkcpu 		( clkcpu 		),
+		.reset 			( por     		),
 		
 		.i				( {1'b1, timer[1].reload, timer[0].reload, por, ir_edge, 3'b000}),
 		.irq			( irqa_req		),
@@ -133,6 +134,7 @@ wire ir_edge;
 	) IRQB
    (
 		.clkcpu 		( clkcpu 		),
+		.reset 			( por     		),
 		
 		.i				( { kbd_in_irq,  txdone, ~il[5:0]}),
 		.c				( {!kbd_in_irq, ~txdone,  il[5:0]}),
@@ -152,6 +154,7 @@ wire ir_edge;
 	) FIRQ
    (
 		.clkcpu 		( clkcpu 		),
+		.reset 			( por     		),
 		
 		.i				( {6'h00, fh[1:0]}	),
 		.c				( {6'h00, ~fh[1:0]}),
@@ -224,48 +227,39 @@ generate
 	
 endgenerate
 
-initial begin 
-
-	ctrl_state = 6'h3F;
-
-	ir_r = 1'b1;
-	
-end
-
-
-
 // here we generate the ack signal and the 2mhz enable.
 always @(posedge clkcpu) begin
 
-	// generate strobe one clock cycle after data has been latched
-	kbd_out_strobe <= !txdone;
-	kbd_in_irq_ack <= serial_selected && read_request;
+	if (por) begin
+		ctrl_state <= 6'h3F;
+		ir_r       <= 1'b1;
+	end else begin 
+		// generate strobe one clock cycle after data has been latched
+		kbd_out_strobe <= !txdone;
+		kbd_in_irq_ack <= serial_selected && read_request;
 
-	ir_r		<= ir;
-	
-	if (!txdone &&(timer[3].reload)) begin 
-		
-		txcount <= txcount - 4'd1;
-		
+		ir_r		<= ir;
+
+		if (!txdone &&(timer[3].reload)) begin 
+			txcount <= txcount - 4'd1;
+		end
+
+		// increment the clock counter. 42 MHz clkcpu assumed.
+		clken_counter <= clken_counter + 1'd1;
+		if (clken_counter == 20) clken_counter <= 0;
+
+		if (write_request & ctrl_selected) begin 
+			ctrl_state <= wb_dat_i[5:0];
+		end
+
+		if (write_request & serial_selected) begin 
+			// simulate a serial port write to the console.
+			kbd_out_strobe <= 1'b0;
+			kbd_out_data <= wb_dat_i[7:0];
+			txcount <= 5'd20;
+		end 
 	end
-
-	// increment the clock counter. 42 MHz clkcpu assumed.
-	clken_counter <= clken_counter + 1'd1;
-	if (clken_counter == 20) clken_counter <= 0;
-
-	if (write_request & ctrl_selected) begin 
 	
-		ctrl_state <= wb_dat_i[5:0];
-	
-	end
-	
-	if (write_request & serial_selected) begin 
-		// simulate a serial port write to the console.
-		kbd_out_strobe <= 1'b0;
-		kbd_out_data <= wb_dat_i[7:0];
-		txcount <= 5'd20;
-	end 
-
 	
 end
 

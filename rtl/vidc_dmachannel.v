@@ -75,7 +75,7 @@ vidc_fifo #(.FIFO_SIZE(FIFO_SIZE)) VIDEO_FIFO
 
 // DMA interface control
 // this is in the cpu clock domain. 
-always @(posedge clkcpu) begin
+always @(posedge clkcpu) begin : block
 	reg [1:0] dma_count;
 	reg rstD, rstD2;
 

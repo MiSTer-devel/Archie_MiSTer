@@ -52,7 +52,7 @@ module fdc1772 #(parameter CLK)
 		input      [1:0] img_mounted, // signaling that new image has been mounted
 		input            img_wp,      // write protect. latched at img_mounted
 		input     [31:0] img_size,    // size of image in bytes
-		output reg[31:0] sd_lba,
+		output reg[31:0] sd_lba = 32'd0,
 		output reg [1:0] sd_rd,
 		output reg [1:0] sd_wr,
 		input            sd_ack,
@@ -63,6 +63,48 @@ module fdc1772 #(parameter CLK)
 );
 
 localparam CLK_EN = 8000000;
+
+localparam FDC_REG_CMDSTATUS    = 0;
+localparam FDC_REG_TRACK        = 1;
+localparam FDC_REG_SECTOR       = 2;
+localparam FDC_REG_DATA         = 3;
+
+reg step_in, step_out;
+reg [7:0] cmd;
+
+reg [1:0] sd_state;
+reg       sd_card_write;
+reg       sd_card_read;
+reg       sd_card_done;
+
+// floppy delivers data at a floppy generated rate (usually 250kbit/s), so the start and stop
+// signals need to be passed forth and back from cpu clock domain to floppy data clock domain
+reg data_transfer_start;
+reg data_transfer_done;
+
+// cpu register write
+reg cmd_rx;
+reg cmd_rx_i;
+reg last_stb;
+reg data_in_strobe;
+
+wire cmd_type_1 = (cmd[7] == 1'b0);
+wire cmd_type_2 = (cmd[7:6] == 2'b10);
+wire cmd_type_3 = (cmd[7:5] == 3'b111) || (cmd[7:4] == 4'b1100);
+//wire cmd_type_4 = (cmd[7:4] == 4'b1101);
+
+// 1 kB buffer used to receive a sector as fast as possible from from the io
+// controller. The internal transfer afterwards then runs at 250000 Bit/s
+reg [10:0] fifo_cpuptr = 11'd0;
+wire [7:0] fifo_q;
+
+reg [7:0] track;
+reg [7:0] sector;
+reg [7:0] data_in = 8'd0;
+reg [7:0] data_out;
+
+reg step_dir;
+reg motor_on;
 
 // -------------------------------------------------------------------------
 // --------------------- IO controller status handling ---------------------
@@ -77,7 +119,7 @@ wire         floppy_present = (floppy_drive == 4'b1110)?floppy_ready[0]:
 wire floppy_write_protected = (floppy_drive == 4'b1110)?floppy_wp[0]:
 	                          (floppy_drive == 4'b1101)?floppy_wp[1]:1'd1;
 
-always @(posedge clkcpu) begin
+always @(posedge clkcpu) begin : block
 	reg [1:0] img_mountedD;
 
 	img_mountedD <= img_mounted;
@@ -105,7 +147,7 @@ always @(posedge clkcpu)
    
 wire irq_clr = !floppy_reset || cpu_read_status;
    
-always @(posedge clkcpu or posedge irq_clr) begin
+always @(posedge clkcpu or posedge irq_clr) begin : block2
 	reg irq_setD;
 
 	if(irq_clr) irq <= 1'b0;
@@ -321,7 +363,6 @@ localparam [3:0] MOTOR_IDLE_COUNTER = 10;
 reg [3:0] motor_timeout_index;
 reg indexD;
 reg busy;
-reg step_in, step_out;
 reg [3:0] motor_spin_up_sequence;
 
 // consider spin up done either if the motor is not supposed to spin at all or
@@ -347,7 +388,7 @@ reg [15:0] step_rate_cnt;
 wire step_busy = (step_rate_cnt != 0);
 reg [7:0] step_to;
 
-always @(posedge clkcpu) begin
+always @(posedge clkcpu) begin : block3
 	reg data_transfer_can_start;
 
 	if(!floppy_reset) begin
@@ -500,17 +541,7 @@ always @(posedge clkcpu) begin
 	end
 end
 
-// floppy delivers data at a floppy generated rate (usually 250kbit/s), so the start and stop
-// signals need to be passed forth and back from cpu clock domain to floppy data clock domain
-reg data_transfer_start;
-reg data_transfer_done;
-
 // ==================================== FIFO ==================================
-
-// 1 kB buffer used to receive a sector as fast as possible from from the io
-// controller. The internal transfer afterwards then runs at 250000 Bit/s
-reg [10:0] fifo_cpuptr;
-wire [7:0] fifo_q;
 
 dpram_dif #(9,16,10,8) fifo
 (
@@ -521,7 +552,7 @@ dpram_dif #(9,16,10,8) fifo
 	.wren_a(sd_buff_wr & sd_ack),
 	.q_a(sd_buff_din),
 
-	.address_b(fifo_cpuptr),
+	.address_b(fifo_cpuptr[9:0]),
 	.data_b(data_in),
 	.wren_b(data_in_strobe),
 	.q_b(fifo_q)
@@ -532,12 +563,7 @@ localparam SD_IDLE = 0;
 localparam SD_READ = 1;
 localparam SD_WRITE = 2;
 
-reg [1:0] sd_state;
-reg       sd_card_write;
-reg       sd_card_read;
-reg       sd_card_done;
-
-always @(posedge clkcpu) begin
+always @(posedge clkcpu) begin : block4
 	reg sd_ackD;
 	reg sd_card_readD;
 	reg sd_card_writeD;
@@ -599,7 +625,7 @@ end
 
 // -------------------- CPU data read/write -----------------------
 
-always @(posedge clkcpu) begin
+always @(posedge clkcpu) begin : block5
    reg        data_transfer_startD;
    reg [10:0] data_transfer_cnt;
 
@@ -669,25 +695,7 @@ wire [7:0] status = { motor_on,
 		      cmd_type_1?~fd_index:floppy_drq,
 		      busy } /* synthesis keep */;
 
-reg [7:0] track;
-reg [7:0] sector;
-reg [7:0] data_in;
-reg [7:0] data_out;
-
-reg step_dir;
-reg motor_on;
-
 // ---------------------------- command register -----------------------   
-reg [7:0] cmd;
-wire cmd_type_1 = (cmd[7] == 1'b0);
-wire cmd_type_2 = (cmd[7:6] == 2'b10);
-wire cmd_type_3 = (cmd[7:5] == 3'b111) || (cmd[7:4] == 4'b1100);
-//wire cmd_type_4 = (cmd[7:4] == 4'b1101);
-
-localparam FDC_REG_CMDSTATUS    = 0;
-localparam FDC_REG_TRACK        = 1;
-localparam FDC_REG_SECTOR       = 2;
-localparam FDC_REG_DATA         = 3;
 
 // CPU register read
 always @(*) begin
@@ -702,12 +710,6 @@ always @(*) begin
       endcase
    end
 end
-
-// cpu register write
-reg cmd_rx;
-reg cmd_rx_i;
-reg last_stb;
-reg data_in_strobe;
 
 always @(posedge clkcpu) begin
    if(!floppy_reset) begin

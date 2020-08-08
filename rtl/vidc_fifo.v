@@ -41,8 +41,8 @@ module vidc_fifo #(
 		input 		rd_en,
 		output reg [7:0]	dout,
 		
-		output reg [WORD_WIDTH-1:0] wr_ptr,
-		output reg [WORD_WIDTH-1:0] space,
+		output reg [FIFO_SIZE-1:0] wr_ptr,
+		output reg [FIFO_SIZE-1:0] space,
 		output reg                  full,
 		output                      empty
 );
@@ -74,7 +74,7 @@ end
 
 reg [BYTE_WIDTH-1:0] rd_ptr_r;
 
-always @(posedge wr_clk) begin
+always @(posedge wr_clk) begin : block
 	reg rstD, rstD2;
 
 	rd_ptr_r	<= rd_ptr;
@@ -103,7 +103,7 @@ end
 
 wire [7:0] q;
 
-always @(posedge rd_clk) begin
+always @(posedge rd_clk) begin : block2
 
     reg rstD, rstD2;
 

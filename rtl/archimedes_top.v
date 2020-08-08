@@ -133,6 +133,7 @@ wire [5:0]	ioc_cin, ioc_cout;
 a23_core ARM(
 
 	.i_clk		( CLKCPU_I		),
+	.i_reset	( RESET_I		),
 	
 	.o_wb_cyc	( cpu_cyc		),
 	.o_wb_stb	( cpu_stb		),

@@ -1,4 +1,4 @@
-# Acorn Archimedes for [MiSTer Board](https://github.com/MiSTer-devel/Main_MiSTer/wiki)
+# [Acorn Archimedes](https://en.wikipedia.org/wiki/Acorn_Archimedes) for [MiSTer Board](https://github.com/MiSTer-devel/Main_MiSTer/wiki)
 
 ### This is the port of [Archie](https://github.com/mist-devel/mist-board/tree/master/cores/archie) core from MiST by Stephen Leary
 

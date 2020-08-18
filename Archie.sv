@@ -130,10 +130,10 @@ assign {UART_RTS, UART_TXD, UART_DTR} = 0;
 assign {DDRAM_CLK, DDRAM_BURSTCNT, DDRAM_ADDR, DDRAM_DIN, DDRAM_BE, DDRAM_RD, DDRAM_WE} = 0; 
 assign {SD_SCK, SD_MOSI, SD_CS} = 'Z;
 
-assign LED_USER  = 0;
+assign LED_USER  = fdd_led;
 assign LED_DISK  = 0;
 assign LED_POWER = 0;
-assign BUTTONS = 0;
+assign BUTTONS   = 0;
 
 assign VIDEO_ARX = status[1] ? 8'd16 : 8'd4;
 assign VIDEO_ARY = status[1] ? 8'd9  : 8'd3; 
@@ -299,6 +299,8 @@ wire [15:0] ide_data_i;
 wire        ide_data_rd;
 wire        ide_data_we;
 
+wire        fdd_led;
+
 archimedes_top #(CLKSYS) ARCHIMEDES
 (
 	.CLKCPU_I	    ( clk_sys        ),
@@ -335,7 +337,7 @@ archimedes_top #(CLKSYS) ARCHIMEDES
 	.I2C_DIN		    ( i2c_dout       ),
 	.I2C_CLOCK	    ( i2c_clock      ),
 
-	.DEBUG_LED	    (                ),
+	.FDD_LED	       ( fdd_led        ),
 
 	.sd_lba         ( sd_lba         ),
 	.sd_rd          ( sd_rd          ),

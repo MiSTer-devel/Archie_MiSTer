@@ -66,10 +66,10 @@ module archimedes_top #(parameter CLKCPU)
 	output			I2C_DOUT,
 	input				I2C_DIN,
 	output			I2C_CLOCK,
-	
+
 	// "Floppy" LED
-	output			DEBUG_LED,
-	
+	output			FDD_LED,
+
 	// floppy connections to external controller
 	input    [1:0] img_mounted, // signaling that new image has been mounted
 	input          img_wp,      // write protect. latched at img_mounted
@@ -456,7 +456,6 @@ assign I2C_CLOCK	= ioc_cout[1];
 assign I2C_DOUT	= ioc_cout[0];
 						
 assign ioc_cin[5:0] 	= {ioc_cout[5:2], I2C_CLOCK, I2C_DIN};
-assign DEBUG_LED 		= ~(~floppy_inuse & ~floppy_drive[0]);
+assign FDD_LED 		= ~floppy_inuse;
 
-	
 endmodule // archimedes_top

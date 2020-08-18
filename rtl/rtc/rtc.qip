@@ -1,0 +1,4 @@
+set_global_assignment -name VERILOG_FILE [file join $::quartus(qip_path) i2cSlave.v ]
+set_global_assignment -name VERILOG_FILE [file join $::quartus(qip_path) i2cSlave_define.v ]
+set_global_assignment -name VERILOG_FILE [file join $::quartus(qip_path) serialInterface.v ]
+set_global_assignment -name VERILOG_FILE [file join $::quartus(qip_path) registerInterface.v ]

@@ -17,6 +17,7 @@
 // along with this program.  If not, see <http://www.gnu.org/licenses/>.
 //
 
+// altera message_off 10030
 module ide (
 	input             clk, // system clock.
 	input             reset,

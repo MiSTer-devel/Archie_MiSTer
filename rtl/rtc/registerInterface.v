@@ -56,7 +56,7 @@ module registerInterface
 );
 
 wire [7:0] mem_out;
-spram #(8,8,"rtl/cmos.mif","CMOS") memory
+spram #(8,8,"rtl/rtc/cmos.mif","CMOS") memory
 (
 	.clock(clk),
 	.address(addr),

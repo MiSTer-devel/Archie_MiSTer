@@ -232,7 +232,31 @@ hps_io #(.STRLEN($size(CONF_STR)>>3), .WIDE(1), .VDNUM(2)) hps_io
 );
 
 wire [35:0] EXT_BUS;
-hps_ext hps_ext(.*);
+hps_ext hps_ext
+(
+	.clk_sys        ( clk_sys        ),
+	.EXT_BUS        ( EXT_BUS        ),
+
+	.kbd_out_data   ( kbd_out_data   ),
+	.kbd_out_strobe ( kbd_out_strobe ),
+	.kbd_in_data    ( kbd_in_data    ),
+	.kbd_in_strobe  ( kbd_in_strobe  ),
+
+	.reset          ( reset          ),
+	.ide_req        ( ide_req        ),
+	.ide_ack        ( ide_ack        ),
+	.ide_err        ( ide_err        ),
+	.ide_reg_o_adr  ( ide_reg_i_adr  ),
+	.ide_reg_o      ( ide_reg_i      ),
+	.ide_reg_we     ( ide_reg_we     ),
+	.ide_reg_i_adr  ( ide_reg_o_adr  ),
+	.ide_reg_i      ( ide_reg_o      ),
+	.ide_data_addr  ( ide_data_addr  ),
+	.ide_data_o     ( ide_data_i     ),
+	.ide_data_i     ( ide_data_o     ),
+	.ide_data_rd    ( ide_data_rd    ),
+	.ide_data_we    ( ide_data_we    )
+);
 
 assign AUDIO_S = 1;
 assign AUDIO_MIX = status[3:2];
@@ -261,55 +285,83 @@ always @(posedge clk_sys) if(ioctl_download) initReset_n <= 1;
 
 wire [1:0] selpix;
 
+wire        ide_req;
+wire        ide_ack;
+wire        ide_err;
+wire  [2:0] ide_reg_o_adr;
+wire  [7:0] ide_reg_o;
+wire        ide_reg_we;
+wire  [2:0] ide_reg_i_adr;
+wire  [7:0] ide_reg_i;
+wire  [7:0] ide_data_addr;
+wire [15:0] ide_data_o;
+wire [15:0] ide_data_i;
+wire        ide_data_rd;
+wire        ide_data_we;
+
 archimedes_top #(CLKSYS) ARCHIMEDES
 (
-	.CLKCPU_I	( clk_sys			),
-	.CLKPIX_I	( CLK_VIDEO			),
-	.CEPIX_I	 	( CE_PIXEL			),
-	.SELPIX_O	( selpix				), 
+	.CLKCPU_I	    ( clk_sys        ),
+	.CLKPIX_I	    ( CLK_VIDEO      ),
+	.CEPIX_I	 	    ( CE_PIXEL       ),
+	.SELPIX_O	    ( selpix         ), 
 
-	.CEAUD_I	 	( ceaud  			),
+	.CEAUD_I	 	    ( ceaud          ),
 
-	.RESET_I	   (~ram_ready | reset),
+	.RESET_I	       (~ram_ready | reset),
 
-	.MEM_ACK_I	( core_ack_in		),
-	.MEM_DAT_I	( core_data_in		),
-	.MEM_DAT_O	( core_data_out	),
-	.MEM_ADDR_O	( core_address_out),
-	.MEM_STB_O	( core_stb_out		),
-	.MEM_CYC_O	( core_cyc_out		),
-	.MEM_SEL_O	( core_sel_o		),
-	.MEM_WE_O	( core_we_o			),
-	.MEM_CTI_O  ( core_cti_o      ),
+	.MEM_ACK_I	    ( core_ack_in    ),
+	.MEM_DAT_I	    ( core_data_in   ),
+	.MEM_DAT_O	    ( core_data_out  ),
+	.MEM_ADDR_O	    ( core_address_out),
+	.MEM_STB_O	    ( core_stb_out   ),
+	.MEM_CYC_O	    ( core_cyc_out   ),
+	.MEM_SEL_O	    ( core_sel_o     ),
+	.MEM_WE_O	    ( core_we_o      ),
+	.MEM_CTI_O      ( core_cti_o     ),
 
-	.HSYNC		( core_hs			),
-	.VSYNC		( core_vs			),
+	.HSYNC		    ( core_hs        ),
+	.VSYNC		    ( core_vs        ),
 
-	.VIDEO_R		( core_r				),
-	.VIDEO_G		( core_g				),
-	.VIDEO_B		( core_b				),
-	.VIDEO_EN   ( core_de         ),
+	.VIDEO_R		    ( core_r         ),
+	.VIDEO_G		    ( core_g         ),
+	.VIDEO_B		    ( core_b         ),
+	.VIDEO_EN       ( core_de        ),
 
-	.AUDIO_L		( AUDIO_L			),
-	.AUDIO_R		( AUDIO_R			),
+	.AUDIO_L		    ( AUDIO_L        ),
+	.AUDIO_R		    ( AUDIO_R        ),
 
-	.I2C_DOUT	( i2c_din			),
-	.I2C_DIN		( i2c_dout			),
-	.I2C_CLOCK	( i2c_clock			),
+	.I2C_DOUT	    ( i2c_din        ),
+	.I2C_DIN		    ( i2c_dout       ),
+	.I2C_CLOCK	    ( i2c_clock      ),
 
-	.DEBUG_LED	(    					),
+	.DEBUG_LED	    (                ),
 
-	.sd_lba       ( sd_lba       ),
-	.sd_rd        ( sd_rd        ),
-	.sd_wr        ( sd_wr        ),
-	.sd_ack       ( sd_ack       ),
-	.sd_buff_addr ( sd_buff_addr ),
-	.sd_buff_dout ( sd_buff_dout ),
-	.sd_buff_din  ( sd_buff_din  ),
-	.sd_buff_wr   ( sd_buff_wr   ),
-	.img_mounted  ( img_mounted  ),
-	.img_size     ( img_size     ),
-	.img_wp       ( img_readonly ),
+	.sd_lba         ( sd_lba         ),
+	.sd_rd          ( sd_rd          ),
+	.sd_wr          ( sd_wr          ),
+	.sd_ack         ( sd_ack         ),
+	.sd_buff_addr   ( sd_buff_addr   ),
+	.sd_buff_dout   ( sd_buff_dout   ),
+	.sd_buff_din    ( sd_buff_din    ),
+	.sd_buff_wr     ( sd_buff_wr     ),
+	.img_mounted    ( img_mounted    ),
+	.img_size       ( img_size       ),
+	.img_wp         ( img_readonly   ),
+
+	.ide_req        ( ide_req        ),
+	.ide_ack        ( ide_ack        ),
+	.ide_err        ( ide_err        ),
+	.ide_reg_o_adr  ( ide_reg_o_adr  ),
+	.ide_reg_o      ( ide_reg_o      ),
+	.ide_reg_we     ( ide_reg_we     ),
+	.ide_reg_i_adr  ( ide_reg_i_adr  ),
+	.ide_reg_i      ( ide_reg_i      ),
+	.ide_data_addr  ( ide_data_addr  ),
+	.ide_data_o     ( ide_data_o     ),
+	.ide_data_i     ( ide_data_i     ),
+	.ide_data_rd    ( ide_data_rd    ),
+	.ide_data_we    ( ide_data_we    ),
 
 	.KBD_OUT_DATA   ( kbd_out_data   ),
 	.KBD_OUT_STROBE ( kbd_out_strobe ),

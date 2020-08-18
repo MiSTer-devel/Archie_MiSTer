@@ -7,8 +7,8 @@ set_global_assignment -name VERILOG_FILE rtl/vidc_timing.v
 set_global_assignment -name VERILOG_FILE rtl/vidc.v
 set_global_assignment -name VERILOG_FILE rtl/fdc1772.v
 set_global_assignment -name VERILOG_FILE rtl/floppy.v
+set_global_assignment -name SYSTEMVERILOG_FILE rtl/ide.sv
 set_global_assignment -name VERILOG_FILE rtl/latches.v
-set_global_assignment -name VERILOG_FILE rtl/podules.v
 set_global_assignment -name VERILOG_FILE rtl/serialInterface.v
 set_global_assignment -name VERILOG_FILE rtl/registerInterface.v
 set_global_assignment -name VERILOG_FILE rtl/i2cSlave.v

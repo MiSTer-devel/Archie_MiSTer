@@ -21,47 +21,46 @@
 
 module archimedes_top #(parameter CLKCPU)
 (
-
 	// base CPU Clock
-	input 			CLKCPU_I,
+	input          CLKCPU_I,
 
-	input				CLKPIX_I,
-	input				CEPIX_I,
+	input          CLKPIX_I,
+	input          CEPIX_I,
 	output   [1:0] SELPIX_O,
 	
-	input				CEAUD_I,
+	input          CEAUD_I,
 
-	input 			RESET_I, 
+	input          RESET_I, 
 	
 	// cpu wishbone interface.
-	output			MEM_CYC_O,
-	output			MEM_STB_O,
-	output			MEM_WE_O,
+	output         MEM_CYC_O,
+	output         MEM_STB_O,
+	output         MEM_WE_O,
 		
-	input				MEM_ACK_I,
-	input				MEM_ERR_I,
-	input				MEM_RTY_I,
+	input          MEM_ACK_I,
+	input          MEM_ERR_I,
+	input          MEM_RTY_I,
 	
-	output [3:0]	MEM_SEL_O,
-	output [2:0]	MEM_CTI_O,
-	output [23:2] 	MEM_ADDR_O,
+	output   [3:0] MEM_SEL_O,
+	output   [2:0] MEM_CTI_O,
+	output  [23:2] MEM_ADDR_O,
 	
-	input	 [31:0]	MEM_DAT_I,
-	output [31:0]	MEM_DAT_O,
+	input	  [31:0] MEM_DAT_I,
+	output  [31:0] MEM_DAT_O,
 
 	// video signals (VGA)
-	output			HSYNC,
-	output			VSYNC,
+	output         HSYNC,
+	output         VSYNC,
 	
-	output  [3:0]	VIDEO_R,
-	output  [3:0]	VIDEO_G,
-	output  [3:0]	VIDEO_B,
-	output			VIDEO_EN,
+	output   [3:0] VIDEO_R,
+	output   [3:0] VIDEO_G,
+	output   [3:0] VIDEO_B,
+	output         VIDEO_EN,
 	
 	// VIDC Enhancer selection.
 	// These are from external latch C
-	output [1:0]	VIDBASECLK_O,
-	output [1:0]	VIDSYNCPOL_O,
+	output   [1:0] VIDBASECLK_O,
+	output   [1:0] VIDSYNCPOL_O,
 	
 	// I2C bus to the CMOS.
 	output			I2C_DOUT,
@@ -72,30 +71,45 @@ module archimedes_top #(parameter CLKCPU)
 	output			DEBUG_LED,
 	
 	// floppy connections to external controller
-	input     [1:0] img_mounted, // signaling that new image has been mounted
-	input           img_wp,      // write protect. latched at img_mounted
-	input    [31:0] img_size,    // size of image in bytes
-	output   [31:0] sd_lba,
-	output    [1:0] sd_rd,
-	output    [1:0] sd_wr,
-	input           sd_ack,
-	input     [7:0] sd_buff_addr,
-	input    [15:0] sd_buff_dout,
-	output   [15:0] sd_buff_din,
-	input           sd_buff_wr,
+	input    [1:0] img_mounted, // signaling that new image has been mounted
+	input          img_wp,      // write protect. latched at img_mounted
+	input   [31:0] img_size,    // size of image in bytes
+	output  [31:0] sd_lba,
+	output   [1:0] sd_rd,
+	output   [1:0] sd_wr,
+	input          sd_ack,
+	input    [7:0] sd_buff_addr,
+	input   [15:0] sd_buff_dout,
+	output  [15:0] sd_buff_din,
+	input          sd_buff_wr,
+
+	// connection to the IDE controller
+	output         ide_req,      // new command request
+	input          ide_err,
+	input          ide_ack,      // command finished on the IO controller side
+	input    [2:0] ide_reg_o_adr,// requested task file register index
+	output   [7:0] ide_reg_o,    // task file register out
+	input          ide_reg_we,   // task file register write strobe from IO controller
+	input    [2:0] ide_reg_i_adr,
+	input    [7:0] ide_reg_i,    // task file register input
+	input    [7:0] ide_data_addr,
+	output  [15:0] ide_data_o,
+	input   [15:0] ide_data_i,
+	input          ide_data_rd,
+	input          ide_data_we,
 
 	// connection to keyboard controller
-	output [7:0]   KBD_OUT_DATA,
+	output   [7:0] KBD_OUT_DATA,
 	output         KBD_OUT_STROBE,
-	input [7:0]    KBD_IN_DATA,
+	input    [7:0] KBD_IN_DATA,
 	input          KBD_IN_STROBE,
 	
-	input [4:0]		JOYSTICK0,
-	input [4:0]		JOYSTICK1,
+	input    [4:0] JOYSTICK0,
+	input    [4:0] JOYSTICK1,
 	
 	// audio signal.
-	output [15:0]	AUDIO_L,
-	output [15:0]	AUDIO_R
+	output  [15:0] AUDIO_L,
+	output  [15:0] AUDIO_R
 	
 );		      
 
@@ -294,28 +308,36 @@ ioc IOC(
 	.kbd_in_strobe ( KBD_IN_STROBE  		)
 );
 
-wire 	podules_en = ioc_cs & ioc_select[4];
+localparam PODULE0 = 2'b00;
+localparam PODULE1 = 2'b01;
+localparam PODULE2 = 2'b10;
+localparam PODULE3 = 2'b11;
 
-// all podules live in the the podules module.
-// this is just to keep things tidy.
-podules PODULES(
-	// everything is synced to the master 32m clock except the pix clock.
-	.clkcpu			( CLKCPU_I				),
-	.clk2m_en		( ioc_clk2m_en			),
-	.clk8m_en		( ioc_clk8m_en			),
+wire        podules_en   = ioc_cs & ioc_select[4];
+wire  [1:0] podule_num   = cpu_address[15:14];
+wire [15:0] podule_wdata = cpu_dat_o[31:16];
+wire [13:2] podule_adr   = cpu_address[13:2];
+
+wire [15:0] podule0_rdata;
+wire [15:0] podule1_rdata;
+wire [15:0] podule2_rdata;
+wire [15:0] podule3_rdata;
+
+reg  [15:0] podule_rdata;
+always @(*) begin
+	podule_rdata = 16'hFFFF;
 	
-	.rst_i			( RESET_I				),
+	if(podule_num == PODULE0) podule_rdata = podule0_rdata;
+	//if(podule_num == PODULE1) podule_rdata = podule1_rdata;
+	//if(podule_num == PODULE2) podule_rdata = podule2_rdata;
+	//if(podule_num == PODULE3) podule_rdata = podule3_rdata;
+end
 
-	.speed_i			( ioc_speed				),
-	
-	.wb_cyc			( cpu_cyc & podules_en),
-	.wb_stb			( cpu_stb & podules_en),
-	.wb_we			( cpu_we  & podules_en),
+wire podule0_sel = podules_en && cpu_stb && cpu_cyc && podule_num == PODULE0;
+//wire podule1_sel = podules_en && cpu_stb && cpu_cyc && podule_num == PODULE1;
+//wire podule2_sel = podules_en && cpu_stb && cpu_cyc && podule_num == PODULE2;
+//wire podule3_sel = podules_en && cpu_stb && cpu_cyc && podule_num == PODULE3;
 
-	.wb_dat_o		( pod_dat_o				),
-	.wb_dat_i		( cpu_dat_o[15:0]		),
-	.wb_adr			( cpu_address[15:2]	)
-);
 
 wire [7:0]	floppy_dat_o;
 wire 		floppy_en = ioc_cs & ioc_select[1];
@@ -328,40 +350,67 @@ wire 		  	floppy_inuse;
 wire 		  	floppy_density;
 wire 		  	floppy_reset;
 
-fdc1772 #(CLKCPU) FDC1772
-(
-	.clkcpu			( CLKCPU_I				),
-	.clk8m_en		( ioc_clk8m_en			),
+wire        fdc_sel = cpu_stb & cpu_cyc & floppy_en;
+fdc1772 #(CLKCPU) FDC1772 (
+	.clkcpu         ( CLKCPU_I         ),
+	.clk8m_en       ( ioc_clk8m_en     ),
 
-	.wb_cyc			( cpu_cyc & floppy_en),
-	.wb_stb			( cpu_stb & floppy_en),
-	.wb_we			( cpu_we  & floppy_en),
+	.cpu_sel        ( fdc_sel          ),
+	.cpu_rw         ( !cpu_we          ),
+	.cpu_addr       ( cpu_address[3:2] ),
+	.cpu_dout       ( floppy_dat_o     ),
+	.cpu_din        ( cpu_dat_o[23:16] ),
 
-	.wb_dat_o		( floppy_dat_o			),
-	.wb_dat_i		( cpu_dat_o[23:16]	),
-	.wb_adr			( cpu_address[15:2]	), 
-	
-	.floppy_firq	( floppy_firq			),
-	.floppy_drq		( floppy_drq			),
-	
-	.img_mounted    ( img_mounted           ),
-	.img_size       ( img_size              ),
-	.img_wp        ( img_wp             ),
-	.sd_lba         ( sd_lba                ),
-	.sd_rd          ( sd_rd                 ),
-	.sd_wr          ( sd_wr                 ),
-	.sd_ack         ( sd_ack                ),
-	.sd_buff_addr   ( sd_buff_addr          ),
-	.sd_buff_dout  ( sd_buff_dout       ),
-	.sd_buff_din   ( sd_buff_din        ),
-	.sd_buff_wr    ( sd_buff_wr         ),
-	
-	.floppy_drive	( floppy_drive			),
-	.floppy_motor	( floppy_motor			),
-	.floppy_inuse	( floppy_inuse			),
-	.floppy_side	( floppy_side 			),
-	.floppy_density( floppy_density		),
-	.floppy_reset	( floppy_reset			)
+	.irq            ( floppy_firq      ),
+	.drq            ( floppy_drq       ),
+
+	.img_mounted    ( img_mounted      ),
+	.img_size       ( img_size         ),
+	.img_wp         ( img_wp           ),
+	.sd_lba         ( sd_lba           ),
+	.sd_rd          ( sd_rd            ),
+	.sd_wr          ( sd_wr            ),
+	.sd_ack         ( sd_ack           ),
+	.sd_buff_addr   ( sd_buff_addr     ),
+	.sd_dout        ( sd_buff_dout     ),
+	.sd_din         ( sd_buff_din      ),
+	.sd_dout_strobe ( sd_buff_wr       ),
+
+	.floppy_drive	( floppy_drive     ),
+//	.floppy_motor	( floppy_motor     ),
+//	.floppy_inuse	( floppy_inuse     ),
+	.floppy_side	( floppy_side      ),
+//	.floppy_density ( floppy_density   ),
+	.floppy_reset	( floppy_reset     )
+);
+
+
+ide IDE (
+
+	.clk            ( CLKCPU_I         ),
+	.reset          ( RESET_I          ),
+
+	.ide_sel        ( podule0_sel      ),
+	.ide_we         ( cpu_we           ),
+	.ide_adr        ( podule_adr       ),
+	.ide_dat_o      ( podule0_rdata    ),
+	.ide_dat_i      ( podule_wdata     ),
+
+	.ide_req        ( ide_req          ),
+	.ide_ack        ( ide_ack          ),
+	.ide_err        ( ide_err          ),
+
+	.ide_reg_o_adr  ( ide_reg_o_adr    ),
+	.ide_reg_o      ( ide_reg_o        ),
+	.ide_reg_we     ( ide_reg_we       ),
+	.ide_reg_i_adr  ( ide_reg_i_adr    ),
+	.ide_reg_i      ( ide_reg_i        ),
+
+	.ide_data_addr  ( ide_data_addr    ),
+	.ide_data_o     ( ide_data_o       ),
+	.ide_data_i     ( ide_data_i       ),
+	.ide_data_rd    ( ide_data_rd      ),
+	.ide_data_we    ( ide_data_we      )
 );
 
 wire [7:0]	latches_dat_o;
@@ -398,7 +447,7 @@ assign MEM_DAT_O	= 	cpu_dat_o;
 
 assign cpu_dat_i	=	floppy_en				?	{24'd0, floppy_dat_o} :
 							latches_en				?	{24'd0, latches_dat_o} :
-							podules_en			 	? 	{16'd0, pod_dat_o} :
+							podules_en			 	? 	{16'd0, podule_rdata} :
 							ioc_cs & ~ioc_sext 	?  {24'd0, ioc_dat_o} :			
 							ram_cs					?	cpu_dout	:
 							32'hFFFF_FFFF;

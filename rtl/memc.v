@@ -26,57 +26,55 @@
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
-module memc(
+module memc
+(
+	input         clkcpu,
+	input         rst_i,
 
-		input 	  		clkcpu,
-		input 	  		rst_i,
-		 
-		// cpu bus.
-		input 	  		cpu_we,
-		input 	  		cpu_stb,
-		input 	  		cpu_cyc,
-		output 	  		cpu_err,
-		output   		cpu_ack, 
-		output [31:0]  cpu_dout,
+	// cpu bus.
+	input         cpu_we,
+	input         cpu_stb,
+	input         cpu_cyc,
+	output        cpu_err,
+	output        cpu_ack, 
+	output [31:0] cpu_dout,
 
-		input [25:0]	cpu_address,
-		input [3:0]		cpu_sel,
-		
-		// external memory bus.
-		output [23:2]	mem_addr_o,
-		output 	  		mem_stb_o,
-		output 	  		mem_cyc_o,
-		output 	  		mem_we_o,
-		output  [3:0]	mem_sel_o,
-		input  [31:0]  mem_dat_i,
+	input  [25:0] cpu_address,
+	input   [3:0] cpu_sel,
 
-		input 	  		mem_ack_i, 
-		output [2:0]	mem_cti_o, // burst / normal
-		 
-		// supervisor mode
+	// external memory bus.
+	output [23:2] mem_addr_o,
+	output        mem_stb_o,
+	output        mem_cyc_o,
+	output        mem_we_o,
+	output  [3:0] mem_sel_o,
+	input  [31:0] mem_dat_i,
 
-		input 	  		spvmd,
+	input         mem_ack_i, 
+	output  [2:0] mem_cti_o, // burst / normal
 
-		// vidc interface 
-		input 	  	flybk,
-		input 	  	hsync,
-		
-		input 	  	sndrq,
-		output 	  	sndak,
+	// supervisor mode
 
-		input 	  	vidrq,
-		output 	  	vidak,
-		output		vidw, // write to the video registers.
-		
-		// ioc interface
-		output		ioc_cs,
-		output		rom_low_cs,
-		output		ram_cs, // accessing ram.
-		
-		// interrupts
-		
-		output		sirq_n 
+	input         spvmd,
 
+	// vidc interface 
+	input         flybk,
+	input         hsync,
+
+	input         sndrq,
+	output        sndak,
+
+	input         vidrq,
+	output        vidak,
+	output        vidw, // write to the video registers.
+
+	// ioc interface
+	output        ioc_cs,
+	output        rom_low_cs,
+	output        ram_cs, // accessing ram.
+
+	// interrupts
+	output        sirq_n 
 );
 
 parameter INITIAL_CURSOR_BASE = 19'h0_0000;
@@ -107,17 +105,12 @@ reg			snd_load;
 reg			cpu_load;
 
 reg [3:0]	dma_ack_r;
-
-wire 		dma_in_progress = cur_load | vid_load | snd_load;
-wire 		dma_request	= (~flybk & vidrq) | (memc_control[11] & sndrq);
-reg      dma_request_r;    
-wire 		video_dma_ip = cur_load | vid_load;
-wire 		sound_dma_ip = snd_load;
-
-wire 		address_valid;
-wire		cpu_ram_cycle;
-
-wire 		phycs, tablew, romcs, memcw;
+wire        dma_in_progress = cur_load | vid_load | snd_load;
+wire        dma_request     = (~flybk & vidrq) | (memc_control[11] & sndrq);
+reg         dma_request_r;    
+wire        video_dma_ip    = cur_load | vid_load;
+wire        sound_dma_ip    = snd_load;
+wire        phycs, tablew, romcs, memcw;
 
 // register addresses.
 localparam REG_Vinit 	= 3'b000;
@@ -132,8 +125,8 @@ localparam REG_Ctrl		= 3'b111;
 wire[25:0] phys_address;
 wire       table_valid;
 
-memc_translator PAGETABLES(
-
+memc_translator PAGETABLES
+(
 	.clkcpu		( clkcpu		),
 	.wr			( tablew		),
 	.spvmd		( spvmd			),
@@ -149,24 +142,6 @@ reg [31:0] cache_data[0:3];
 reg        cache_valid;
 reg [23:4] cache_addr;
 reg        cache_ack;
-
-wire   logcs		= cpu_address[25] == 1'b0; // 0000000-&1FFFFFF
-
-wire [21:2] ram_page = 	memc_control[3:2] == 2'b00 ? {3'd0, cpu_address[18:2]}:
-								memc_control[3:2] == 2'b01 ? {2'd0, cpu_address[19:2]} :
-								memc_control[3:2] ==	2'b10 ? {1'd0, cpu_address[20:2]} : cpu_address[21:2];
-  
-
-wire [23:2] caddr = 	phycs			? {2'd0, ram_page}  : // use physical memory
-							romcs 		? {3'b010, cpu_address[20:2]} 	: // use 2mb and up for rom space.  
-							table_valid	& logcs	? phys_address[23:2] : 22'd0; // use logical memory.
-
-
-assign cpu_dout = cache_data[caddr[3:2]];
-
-wire   cpu_mem_we	= cpu_we & ((phycs & spvmd) | (table_valid & logcs)) & ~romcs;
-wire   memw 		= cpu_load & cpu_cyc & cpu_we & spvmd & (cpu_address[25:21] == 5'b11011); // &3600000
-wire   err			= ~address_valid;
 
 always @(posedge clkcpu) begin : block
 	reg cache_rcv, cache_test;
@@ -197,7 +172,7 @@ always @(posedge clkcpu) begin : block
       cache_valid <= 0;
 		cache_test <= 0;
 
-		snd_next_valid = 1'b0;  // sound init.
+		snd_next_valid <= 1'b0;  // sound init.
 
 		dma_ack_r = 4'd0; // video init.
 
@@ -413,44 +388,52 @@ always @(posedge clkcpu) begin : block
 
 end
 
-assign mem_addr_o = 	vid_load		? {5'd0, vid_address[18:2]}	:
-							cur_load		? {5'd0, cur_address[18:2]} :
-							snd_load		? {5'd0, snd_sptr[18:2]} :
-							caddr;
 
-// does this cpu cycle need to go to external RAM/ROM?
-//assign cpu_ram_cycle = cpu_cyc & cpu_stb & (table_valid | phycs | romcs); 
-							
-assign mem_cyc_o  = cpu_load ? cpu_cyc & ~err : dma_in_progress;
-assign mem_stb_o  = cpu_load ? cpu_stb    : dma_in_progress;
-assign mem_sel_o	= cpu_load ? cpu_sel    : 4'b1111;
-assign mem_we_o	= cpu_load ? cpu_mem_we : 1'b0;
-assign mem_cti_o	= 3'b010;                   
+wire [21:2] ram_page = memc_control[3:2] == 2'b00 ? {3'd0, cpu_address[18:2]} :
+                       memc_control[3:2] == 2'b01 ? {2'd0, cpu_address[19:2]} :
+                       memc_control[3:2] == 2'b10 ? {1'd0, cpu_address[20:2]} :
+                                                    cpu_address[21:2];
+  
+assign mem_addr_o    = vid_load ? {5'd0, vid_address[18:2]}	:
+                       cur_load ? {5'd0, cur_address[18:2]} :
+                       snd_load ? {5'd0, snd_sptr[18:2]}    :
+                                  caddr;
 
-wire   vidc_cs		= spvmd & (cpu_address[25:21] == 5'b11010); // &3400000 - &35FFFFF (WE & SPVMD)
+wire [23:2] caddr    = phycs    ? {2'd0, ram_page}                : // use physical memory
+                       romcs    ? {3'b010, cpu_address[20:2]} 	   : // use 2mb and up for rom space.  
+                       table_valid	& logcs	? phys_address[23:2] : // use logical memory.
+                       22'd0;
 
-assign address_valid = (logcs & table_valid) | rom_low_cs| ioc_cs | memw | tablew | vidc_cs | (phycs & ~cpu_we) | (phycs & spvmd & cpu_we) | romcs; 
+assign mem_cyc_o     = cpu_load ? cpu_cyc & ~err : dma_in_progress;
+assign mem_stb_o     = cpu_load ? cpu_stb        : dma_in_progress;
+assign mem_sel_o     = cpu_load ? cpu_sel        : 4'b1111;
+assign mem_we_o      = cpu_load ? cpu_mem_we     : 1'b0;
+assign mem_cti_o     = 3'b010;                   
 
-assign cpu_ack		= (mem_we_o ? mem_ack_i : cache_ack) & ~err;
-assign cpu_err		= cpu_load ? mem_ack_i & err : 1'b0;
+wire   address_valid = (logcs & table_valid) | rom_low_cs| ioc_cs | memw | tablew | vidc_cs | (phycs & ~cpu_we) | (phycs & spvmd & cpu_we) | romcs; 
+wire   err           = ~address_valid;
 
-assign tablew 		= cpu_load & cpu_cyc & cpu_we & spvmd & (cpu_address[25:23] == 3'b111) & (cpu_address[12] == 0) & (cpu_address[7] == 0); // &3800000+ 
+assign cpu_ack       = (mem_we_o ? mem_ack_i : cache_ack) & ~err;
+assign cpu_err       = cpu_load ? mem_ack_i & err : 1'b0;
+assign cpu_dout      = cache_data[caddr[3:2]];
+wire   cpu_mem_we    = cpu_we & ((phycs & spvmd) | (table_valid & logcs)) & ~romcs;
 
-assign vidw  		= cpu_load & cpu_cyc & cpu_we & vidc_cs; // &3400000
+assign tablew        = cpu_load & cpu_cyc & cpu_we & spvmd & (cpu_address[25:23] == 3'b111) & (cpu_address[12] == 0) & (cpu_address[7] == 0); // &3800000+ 
+wire   memw          = cpu_load & cpu_cyc & cpu_we & spvmd & (cpu_address[25:21] == 5'b11011); // &3600000
+assign vidw          = cpu_load & cpu_cyc & cpu_we & vidc_cs; // &3400000
 
 // bus chip selects
-assign phycs		= cpu_address[25:24] == 2'b10;  //&2000000 - &2FFFFFF
-assign ioc_cs		= spvmd & (cpu_address[25:22] == 4'b1100); //&3000000 - &33FFFFF
-assign rom_low_cs = (cpu_address[25:22] == 4'b1101); 
+wire   logcs         = cpu_address[25] == 1'b0;                                                        // 0000000 - 1FFFFFF
+assign phycs         = cpu_address[25:24] == 2'b10;                                                    // 2000000 - 2FFFFFF
+assign ioc_cs        = spvmd & (cpu_address[25:22] == 4'b1100);                                        // 3000000 - 33FFFFF
+wire   vidc_cs       = spvmd & (cpu_address[25:21] == 5'b11010);                                       // 3400000 - 35FFFFF (WE & SPVMD)
+assign rom_low_cs    = (cpu_address[25:22] == 4'b1101);                                                // 3400000 - 37FFFFF
+assign romcs         = ((cpu_address[25:23] == 3'b111) | (cpu_address[25:19] == 7'h00) & rom_overlay); // 3800000 - 3FFFFFF
 
-assign romcs  		= ((cpu_address[25:23] == 3'b111) | (cpu_address[25:19] == 7'h00) & rom_overlay);
+assign vidak         = cpu_load ? 1'b0 : video_dma_ip & mem_ack_i;  
+assign sndak         = cpu_load ? 1'b0 : sound_dma_ip & mem_ack_i;  
 
-assign vidak 		= cpu_load ? 1'b0 : video_dma_ip & mem_ack_i;  
-assign sndak 		= cpu_load ? 1'b0 : sound_dma_ip & mem_ack_i;  
-
-assign sirq_n		= snd_next_valid;
-assign ram_cs		= table_valid | phycs | romcs;
-
-//wire   mem_virtual= table_valid & ~cpu_address[25]; 
+assign sirq_n        = snd_next_valid;
+assign ram_cs        = table_valid | phycs | romcs;
 
 endmodule

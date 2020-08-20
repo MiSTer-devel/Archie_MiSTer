@@ -159,6 +159,11 @@ pll pll
 	.locked(pll_ready)
 );
 
+reg initReset_n = 0;
+always @(posedge clk_sys) if(riscos_dl) initReset_n <= 1;
+
+wire reset = status[0] | buttons[1] | RESET | ~initReset_n | riscos_dl;
+
 //////////////////   HPS I/O   ///////////////////
 wire [15:0] joyA;
 wire [15:0] joyB;
@@ -170,13 +175,13 @@ wire        kbd_out_strobe;
 wire  [7:0] kbd_in_data;
 wire        kbd_in_strobe;
 
-wire [64:0] RTC;
-
 wire        ioctl_download;
 wire  [7:0] ioctl_index;
 wire        ioctl_wr;
 wire [24:0] ioctl_addr;
 wire [15:0] ioctl_dout;
+wire [15:0] ioctl_din;
+reg         ioctl_wait = 0;
 
 wire [31:0] sd_lba;
 wire  [1:0] sd_rd;
@@ -207,14 +212,13 @@ hps_io #(.STRLEN($size(CONF_STR)>>3), .WIDE(1), .VDNUM(2)) hps_io
 	.new_vmode(new_vmode),
 	.gamma_bus(gamma_bus),
 
-	.RTC(RTC),
-
 	.ioctl_index(ioctl_index),
 	.ioctl_download(ioctl_download),
 	.ioctl_addr(ioctl_addr),
 	.ioctl_dout(ioctl_dout),
 	.ioctl_wr(ioctl_wr),
-	.ioctl_wait(loader_stb),
+	.ioctl_wait(ioctl_wait|loader_stb),
+	.ioctl_din(ioctl_din),
 
 	.sd_lba(sd_lba),
 	.sd_rd(sd_rd),
@@ -241,6 +245,8 @@ hps_ext hps_ext
 	.kbd_out_strobe ( kbd_out_strobe ),
 	.kbd_in_data    ( kbd_in_data    ),
 	.kbd_in_strobe  ( kbd_in_strobe  ),
+
+	.cmos_cnt       ( cmos_cnt       ),
 
 	.reset          ( reset          ),
 	.ide_req        ( ide_req        ),
@@ -272,18 +278,12 @@ wire [3:0]	core_sel_o;
 wire [2:0]	core_cti_o;
 wire [31:0] core_data_in, core_data_out;
 wire [31:0] ram_data_in;
-wire [26:2] core_address_out;
+wire [23:2] core_address_out;
 
 wire	[1:0]	pixbaseclk_select;
+wire  [1:0] selpix;
 
 wire 			i2c_din, i2c_dout, i2c_clock;
-
-wire reset = status[0] | buttons[1] | ~initReset_n | ioctl_download;
-
-reg initReset_n = 0;
-always @(posedge clk_sys) if(ioctl_download) initReset_n <= 1;
-
-wire [1:0] selpix;
 
 wire        ide_req;
 wire        ide_ack;
@@ -481,13 +481,13 @@ always @(posedge CLK_VIDEO) begin
 	end
 end
 
-wire			ram_ack;
-wire			ram_stb;
-wire			ram_cyc;
-wire			ram_we;
+wire        ram_ack;
+wire        ram_stb;
+wire        ram_cyc;
+wire        ram_we;
 wire  [3:0]	ram_sel;
-wire [25:0] ram_address;
-wire			ram_ready;
+wire [25:2] ram_address;
+wire        ram_ready;
 
 sdram SDRAM
 (
@@ -521,50 +521,93 @@ sdram SDRAM
 	.sd_ready	(ram_ready   )
 );
 
-i2cSlave CMOS
-(
-	.clk		(clk_sys	 ),
-	.rst		(~pll_ready ),
-	.sdaIn	(i2c_din	 ),
-	.sdaOut	(i2c_dout	 ),
-	.scl		(i2c_clock	 ),
-
-	.RTC     (RTC),
-	
-	.dl_addr(cmos_dl_addr),
-	.dl_data(cmos_dl_addr[0] ? ioctl_dout[15:8] : ioctl_dout[7:0]),
-	.dl_wr(|cmos_dl_wr),
-	.dl_en(cmos_dl)
-);
-
 wire riscos_dl = (ioctl_index == 1) && ioctl_download;
 wire cmos_dl   = (ioctl_index == 3) && ioctl_download;
 
-wire [7:0] cmos_dl_addr;
-wire [1:0] cmos_dl_wr;
-
-reg loader_stb = 0;
+reg [21:2] erase_addr;
+reg        loader_stb = 0;
 always @(posedge clk_sys) begin 
-	if (ram_ack) loader_stb <= 0;
+	reg old_dl = 0;
+
+	if(ram_ack) loader_stb <= 0;
 	if(riscos_dl & ioctl_wr) loader_stb <= 1;
 
-	cmos_dl_addr <= cmos_dl_addr + 1'd1;
-	cmos_dl_wr <= {cmos_dl_wr[0],1'b0};
-
-	if(cmos_dl) begin
-		if(ioctl_wr) begin
-			cmos_dl_addr <= ioctl_addr[7:0];
-			cmos_dl_wr <= 1;
+	old_dl <= riscos_dl;
+	if(~old_dl & riscos_dl) begin
+		ioctl_wait <= 1;
+		erase_addr <= 0;
+	end
+	
+	if(ioctl_wait) begin
+		if(ram_ack) begin
+			if(~&erase_addr) erase_addr <= erase_addr + 1'd1;
+			else ioctl_wait <= 0;
 		end
+		if(~loader_stb) loader_stb <= 1;
 	end
 end
 
-assign ram_we		 = riscos_dl ? 1'b1 : core_we_o;
-assign ram_sel		 = riscos_dl ? (ioctl_addr[1] ? 4'b1100 : 4'b0011) : core_sel_o;
-assign ram_address = riscos_dl ? 25'h400000 + {ioctl_addr[23:2],2'b00} : {core_address_out[23:2],2'b00};
-assign ram_stb		 = riscos_dl ? loader_stb : core_stb_out;
-assign ram_cyc		 = riscos_dl ? loader_stb : core_stb_out;
-assign ram_data_in = riscos_dl ? {ioctl_dout,ioctl_dout} : core_data_out;
+assign ram_we      = riscos_dl ? 1'b1 : core_we_o;
+assign ram_sel     = riscos_dl ? (ioctl_wait ? 4'b1111 : ioctl_addr[1] ? 4'b1100 : 4'b0011) : core_sel_o;
+assign ram_address = riscos_dl ? (ioctl_wait ? erase_addr : {2'b01,ioctl_addr[21:2]}) : core_address_out;
+assign ram_stb     = riscos_dl ? loader_stb : core_stb_out;
+assign ram_cyc     = riscos_dl ? loader_stb : core_cyc_out;
+assign ram_data_in = riscos_dl ? (ioctl_wait ? 32'd0 : {ioctl_dout,ioctl_dout}) : core_data_out;
 assign core_ack_in = riscos_dl ? 1'b0 : ram_ack;
+
+
+//////////////////  RTC/CMOS   ///////////////////
+EEPROM_24C0x eeprom
+(
+   .clk(clk_sys),
+	.ce(eep_ce),
+	.reset(reset),
+
+   .SCL(i2c_clock),
+   .SDA_in(i2c_din),
+   .SDA_out(i2c_dout),
+
+   .type_24C01(0),
+   .E_id(0),
+   .WC_n(0),
+
+   .data_from_ram(eep_dout),
+   .data_to_ram(eep_din),
+   .ram_addr(eep_addr),
+   .ram_read(eep_read),
+   .ram_write(eep_write),
+   .ram_done(1)
+);
+
+wire [7:0] eep_din;
+wire [7:0] eep_dout;
+wire [7:0] eep_addr;
+wire       eep_read;
+wire       eep_write;
+
+reg eep_ce;
+always @(posedge clk_sys) begin
+	reg [1:0] cnt;
+	cnt <= cnt + 1'd1;
+	eep_ce <= !cnt;
+end
+
+reg [7:0] cmos_cnt = 0;
+always @(posedge clk_sys) if(eep_ce && eep_write && eep_addr >= 16) cmos_cnt <= cmos_cnt + 1'd1;
+
+dpram_dif #(8,8,7,16,"rtl/cmos.mif") memory
+(
+	.clock     (clk_sys),
+
+	.address_a (eep_addr),
+	.data_a    (eep_din),
+	.wren_a    (eep_write),
+	.q_a       (eep_dout),
+
+	.address_b (ioctl_addr[7:1]),
+	.data_b    (ioctl_dout),
+	.wren_b    (ioctl_wr & cmos_dl),
+	.q_b       (ioctl_din)
+);
 
 endmodule

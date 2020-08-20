@@ -28,6 +28,8 @@ module hps_ext
 	output reg  [7:0] kbd_in_data,
 	output reg        kbd_in_strobe,
 	
+	input       [7:0] cmos_cnt,
+
 	input             reset,
 	input             ide_req,
 	output reg        ide_ack,
@@ -103,7 +105,6 @@ always@(posedge clk_sys) begin
 	end
 end
 
-localparam CMD_IDE_STATUS      = 8'h00;
 localparam CMD_IDE_REGS_RD     = 8'h80;
 localparam CMD_IDE_REGS_WR     = 8'h90;
 localparam CMD_IDE_DATA_WR     = 8'hA0;
@@ -163,8 +164,8 @@ always@(posedge clk_sys) begin
 			if(byte_cnt == 0) begin
 				cmd <= io_din[15:8];
 				fp_dout_en <= (io_din[15:8] >= CMD_IDE_REGS_RD && io_din[15:8] <= CMD_IDE_STATUS_WR);
-				if(io_din[15:8] == CMD_IDE_STATUS) begin
-					fp_dout <= {write_start ? CMD_IDEDAT : newcmd ? CMD_IDECMD : 8'h00, 8'h00};
+				if(!io_din) begin
+					fp_dout <= {write_start ? CMD_IDEDAT : newcmd ? CMD_IDECMD : 8'h00, cmos_cnt};
 					fp_dout_en <= 1;
 				end
 				if(io_din[15:8] == CMD_IDE_STATUS_WR) begin

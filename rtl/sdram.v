@@ -48,7 +48,7 @@ module sdram
 	input     [31:0] wb_dat_i,	// data input from chipset/cpu
 	output reg[31:0] wb_dat_o = 0,	// data output to chipset/cpu
 	output reg       wb_ack = 0, 
-	input     [23:0] wb_adr,		// lower 2 bits are ignored.
+	input     [23:2] wb_adr,
 	input      [3:0] wb_sel,		// 
 	input      [2:0] wb_cti,		// cycle type. 
 	input            wb_stb, 	//	
@@ -213,7 +213,7 @@ always @(posedge sd_clk) begin
 				// this is the first CAS cycle
 				CYCLE_CAS0: begin 
 					// always, always read on a 32bit boundary and completely ignore the lsb of wb_adr.
-					sd_addr           <= { 4'b0000, wb_adr[9:1] };  // no auto precharge
+					sd_addr           <= { 4'b0000, wb_adr[9:2], 1'b0 };  // no auto precharge
 
 					if (sd_reading) begin 
 						sd_cmd         <= CMD_READ;

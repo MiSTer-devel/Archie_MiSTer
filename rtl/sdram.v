@@ -76,25 +76,17 @@ localparam CMD_LOAD_MODE       = 4'b0000;
 
 localparam MODE = { 3'b000, NO_WRITE_BURST, OP_MODE, CAS_LATENCY, ACCESS_TYPE, BURST_LENGTH}; 
 
-reg [3:0] t;
-reg [4:0] reset;
-reg[31:0] sd_dat[4]; // data output to chipset/cpu
+reg  [8:0] reset = 0;
+reg [15:0] sd_dat[8]; // data output to chipset/cpu
 
-reg			sd_done = 1'b0;
-reg [3:0] 	sd_cmd;   // current command sent to sd ram
+reg        sd_done = 1'b0;
+reg  [3:0] sd_cmd;   // current command sent to sd ram
 
-reg [9:0]	sd_refresh = 10'd0;
-reg			sd_auto_refresh = 1'b0; 
-wire			sd_req = wb_stb & wb_cyc & ~wb_ack;
-wire        sd_reading = wb_stb & wb_cyc & ~wb_we;
-wire        sd_writing = wb_stb & wb_cyc & wb_we;
-
-initial begin 
-	t       = 4'd0;
-	reset   = 5'h1f;
-	sd_cmd  = CMD_NOP;
-	sd_ready= 0;
-end
+reg  [9:0] sd_refresh = 10'd0;
+reg        sd_auto_refresh = 1'b0; 
+wire       sd_req = wb_stb & wb_cyc & ~wb_ack;
+wire       sd_reading = wb_stb & wb_cyc & ~wb_we;
+wire       sd_writing = wb_stb & wb_cyc & wb_we;
 
 localparam CYCLE_IDLE       = 4'd0;
 localparam CYCLE_RAS_START  = CYCLE_IDLE;
@@ -113,7 +105,7 @@ localparam CYCLE_READ6      = CYCLE_READ5+ 1'd1;
 localparam CYCLE_READ7      = CYCLE_READ6+ 1'd1;
 localparam CYCLE_RFSH_END   = CYCLE_RFSH_START + RFC_DELAY; 
 
-localparam RAM_CLK          = 128000000;
+localparam RAM_CLK          = 126000000;
 localparam REFRESH_PERIOD   = (RAM_CLK / (16 * 8192));
 
 always @(posedge sd_clk) begin 
@@ -131,78 +123,60 @@ always @(posedge sd_clk) begin
 	sd_reqD <= sd_req;
 	if(~sd_reqD & sd_req) sd_newreq <= 1;
 
-	if (sd_rst) begin 
-		t			<= 0;
-		reset 	<= 5'h1f;
-		sd_addr	<= 0;
-		sd_ready <= 0;
-		sd_ba    <= 0;
-	end else begin
-		if (reset) begin
-			t <= t + 4'd1;
+	// count while the cycle is active
+	if(sd_cycle != CYCLE_IDLE) sd_cycle <= sd_cycle + 3'd1;
+	sd_refresh <= sd_refresh + 9'd1;
 
-			if (&t) reset <= reset - 5'd1;		
+	if (sd_rst) reset <= 0;
+	else begin
+		if (~&reset) begin
+			sd_ready <= 0;
+			sd_ba    <= 0;
+			word     <= 0;
+			sd_cycle <= CYCLE_IDLE;
+			sd_auto_refresh <= 0;
+			sd_refresh <= 0;
 
-			if (!t) begin 
+			reset <= reset + 1'd1;
 
-				if(reset == 13) begin
-					sd_cmd 		<= CMD_PRECHARGE;
-					sd_addr[10] <= 1;      // precharge all banks
-				end
-
-				if(reset == 2) begin
-					sd_cmd 		<= CMD_LOAD_MODE;
-					sd_addr		<= MODE;
-				end
-
-				if(reset == 1) begin
-					sd_cmd 		<= CMD_LOAD_MODE;
-					sd_addr		<= MODE;
-				end
-
-				word <= 0;
+			if(reset == 32 || reset == 96) begin
+				sd_cmd  <= CMD_PRECHARGE;
+				sd_addr <= 13'b0010000000000; // precharge all banks
 			end
-		end else begin
+
+			if(reset == 208) begin
+				sd_cmd  <= CMD_LOAD_MODE;
+				sd_addr <= MODE;
+			end
+		end
+		else begin
 			sd_ready <= 1;
-	
-			sd_refresh <= sd_refresh + 9'd1;
+
 			if(word) begin
 				word <= word + 1'd1;
-				case(word)
-					1: sd_dat[0][31:16] <= sd_dq_reg;
-					2: sd_dat[1][15:00] <= sd_dq_reg;
-					3: sd_dat[1][31:16] <= sd_dq_reg;
-					4: sd_dat[2][15:00] <= sd_dq_reg;
-					5: sd_dat[2][31:16] <= sd_dq_reg;
-					6: sd_dat[3][15:00] <= sd_dq_reg;
-					7: sd_dat[3][31:16] <= sd_dq_reg;
-				endcase
+				sd_dat[word] <= sd_dq_reg;
 			end
 
-			// this is the auto refresh code.
-			// it kicks in so that 8192 auto refreshes are 
-			// issued in a 64ms period. Other bus operations 
-			// are stalled during this period.
-			if ((sd_refresh > REFRESH_PERIOD) && !sd_cycle) begin 
-				sd_auto_refresh<= 1'b1;
-				sd_refresh		<= 10'd0;
-				sd_cmd	      <= CMD_AUTO_REFRESH;
-			end else if (sd_auto_refresh) begin 
-				// while the cycle is active count.
-				sd_cycle <= sd_cycle + 3'd1;
-				if(sd_cycle == CYCLE_RFSH_END) begin 
-					// reset the count.
+			if (sd_auto_refresh) begin 
+				if(sd_cycle >= CYCLE_RFSH_END) begin 
 					sd_auto_refresh <= 0;
 					sd_cycle <= CYCLE_IDLE;
 				end
 			end
 			else begin
-				// count while the cycle is active
-				if(sd_cycle != CYCLE_IDLE) sd_cycle <= sd_cycle + 3'd1;
-				
 				case(sd_cycle)
-				CYCLE_IDLE: begin 
-					if(sd_newreq) begin
+				CYCLE_IDLE: begin
+					if (sd_refresh > REFRESH_PERIOD) begin 
+						// this is the auto refresh code.
+						// it kicks in so that 8192 auto refreshes are 
+						// issued in a 64ms period. Other bus operations 
+						// are stalled during this period.
+						sd_auto_refresh<= 1;
+						sd_refresh		<= 0;
+						sd_cmd	      <= CMD_AUTO_REFRESH;
+						sd_cycle       <= sd_cycle + 3'd1;
+					end
+					else if(sd_newreq) begin
 						sd_cmd 	      <= CMD_ACTIVE;
 						sd_addr	      <= wb_adr[21:10];
 						sd_ba 	      <= wb_adr[23:22];
@@ -240,7 +214,7 @@ always @(posedge sd_clk) begin
 
 				CYCLE_READ0: begin 
 					if (sd_reading) begin 
-						sd_dat[0][15:0]<= sd_dq_reg;
+						sd_dat[0]      <= sd_dq_reg;
 						word           <= 1;
 					end else begin
 						if (sd_writing) sd_cycle <= CYCLE_IDLE;
@@ -271,13 +245,13 @@ always @(posedge wb_clk) begin
 
 	if (wb_stb & wb_cyc) begin 
 		if ((sd_done ^ sd_doneD) & ~wb_ack) begin 
-			wb_dat_o <= sd_dat[0];
+			wb_dat_o <= {sd_dat[1],sd_dat[0]};
 			word     <= ~wb_cti[2] & (wb_cti[1] ^ wb_cti[0]); // burst constant/incremental
 			wb_ack	<= 1;
 		end
 
 		if (word) begin 
-			wb_dat_o <= sd_dat[word];
+			wb_dat_o <= {sd_dat[{word,1'b1}],sd_dat[{word,1'b0}]};
 			wb_ack   <= 1;
 		end
 	end

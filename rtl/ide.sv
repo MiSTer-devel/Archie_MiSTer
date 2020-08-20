@@ -19,31 +19,24 @@
 
 // altera message_off 10030
 module ide (
-	input             clk, // system clock.
-	input             reset,
+	input         clk, // system clock.
+	input         reset,
 
-	input             ide_sel,
-	input             ide_we,
-	input      [13:2] ide_adr,
-	input      [15:0] ide_dat_i,
-	output reg [15:0] ide_dat_o,
+	input         cpu_sel,
+	input         cpu_we,
+	input  [13:2] cpu_adr,
+	input  [15:0] cpu_dat_i,
+	output [15:0] cpu_dat_o,
 
 	// place any signals that need to be passed up to the top after here.
-	output reg        ide_req,
-	input             ide_err,
-	input             ide_ack,
-
-	input       [2:0] ide_reg_o_adr,
-	output reg  [7:0] ide_reg_o,
-	input             ide_reg_we,
-	input       [2:0] ide_reg_i_adr,
-	input       [7:0] ide_reg_i,
-
-	input       [7:0] ide_data_addr,
-	output     [15:0] ide_data_o,
-	input      [15:0] ide_data_i,
-	input             ide_data_rd,
-	input             ide_data_we
+	output        ide_req,
+	input         ide_err,
+	input         ide_ack,
+	input   [8:0] ide_adr,
+	output [15:0] ide_dat_o,
+	input  [15:0] ide_dat_i,
+	input         ide_we,
+	input         ide_rd
 );
 
 assign ide_req = ide_cmd_req | ide_sector_req;
@@ -52,47 +45,46 @@ assign ide_req = ide_cmd_req | ide_sector_req;
 reg [7:0] rd_rom[16384];
 initial $readmemh("rtl/riscdevide_rom.hex", rd_rom);
 
-wire reg_sel  = ide_sel && ide_adr[13:10] == 4'hA;
-wire page_sel = ide_sel && ide_adr[13:02] == 12'h800 && ide_we ;
+wire reg_sel  = cpu_sel && cpu_adr[13:10] == 4'hA;
+wire page_sel = cpu_sel && cpu_adr[13:02] == 12'h800 && cpu_we ;
 
 reg [2:0] rd_page;
 always @(posedge clk) begin 
 	if (reset)         rd_page <= 0;
-	else if (page_sel) rd_page <= ide_dat_i[2:0];
+	else if (page_sel) rd_page <= cpu_dat_i[2:0];
 end
 
 reg [7:0] rd_rom_q;
-always @(posedge clk) rd_rom_q <= rd_rom[{rd_page, ide_adr[12:2]}];
+always @(posedge clk) rd_rom_q <= rd_rom[{rd_page, cpu_adr[12:2]}];
 
-wire [2:0] ide_reg = ide_adr[4:2];
+wire [2:0] ide_reg = cpu_adr[4:2];
 
 reg [7:0] taskfile[8];
 reg [7:0] status;
 
-// read from Task File Registers
-always @(*) begin
-	reg [7:0] ide_dat_b;
-	//cpu read
-	ide_dat_b = (ide_reg == 3'd7) ? { status[7:1], ide_err } : taskfile[ide_reg];
-	ide_dat_o = ~reg_sel ? {8'd0, rd_rom_q} : ((ide_reg == 3'd0) ? data_out : { ide_dat_b, ide_dat_b });
+wire ide_reg_sel = ide_adr[8];
 
-	// IO controller read
-	ide_reg_o  = taskfile[ide_reg_o_adr];
-end
+// read from Task File Registers
+//cpu read
+wire [7:0] ide_dat_b = (ide_reg == 3'd7) ? { status[7:1], ide_err } : taskfile[ide_reg];
+assign     cpu_dat_o = ~reg_sel ? {8'd0, rd_rom_q} : ((ide_reg == 3'd0) ? data_out : { ide_dat_b, ide_dat_b });
+
+// IO controller read
+assign     ide_dat_o = ide_reg_sel ? taskfile[ide_adr[2:0]] : ide_sec_o;
 
 reg ide_cmd_req;
 // write to Task File Registers
 always @(posedge clk) begin
 	ide_cmd_req <= 0;
 	// cpu write
-	if (reg_sel && ide_we) begin
-		taskfile[ide_reg] <= ide_dat_i[7:0];
+	if (reg_sel && cpu_we) begin
+		taskfile[ide_reg] <= cpu_dat_i[7:0];
 		// writing to the command register triggers the IO controller
 		if (ide_reg == 3'd7) ide_cmd_req <= 1;
 	end
 
 	// IO controller write
-	if (ide_reg_we) taskfile[ide_reg_i_adr] <= ide_reg_i;
+	if (ide_we & ide_reg_sel) taskfile[ide_adr[2:0]] <= ide_dat_i[7:0];
 end
 
 reg ide_sector_req;
@@ -107,7 +99,7 @@ always @(posedge clk) begin
 		sector_count <= 8'd1;
 	end else begin
 		// write to command register starts the execution
-		if (reg_sel && ide_we && ide_reg == 3'd7) begin
+		if (reg_sel && cpu_we && ide_reg == 3'd7) begin
 			sector_count <= taskfile[2];
 			case (taskfile[7])
 				8'h30, 8'hc5: status <= 8'h08; // request data
@@ -124,8 +116,8 @@ always @(posedge clk) begin
 		end
 
 		// sector buffer - IO controller side
-		if ((ide_data_rd | ide_data_we) & ide_data_addr == 8'hff) status <= 8'h08; // sector buffer consumed/filled, ready to transfer
-		if (ide_data_rd | ide_data_we) ide_sector_req <= 0;
+		if ((ide_rd | ide_we) && ide_adr == 9'hff) status <= 8'h08; // sector buffer consumed/filled, ready to transfer
+		if ((ide_rd | ide_we) && ~ide_reg_sel) ide_sector_req <= 0;
 
 		// sector buffer - CPU side
 		if (reg_sel_d && ~reg_sel && ide_reg == 3'd0 && data_addr == 8'hff) begin
@@ -155,22 +147,23 @@ reg         reg_sel_d;
 // read/write data register
 always @(posedge clk) begin
 	reg_sel_d <= reg_sel;
-	if (reg_sel && ide_we && ide_reg == 3'd7) data_addr <= 0;
+	if (reg_sel && cpu_we && ide_reg == 3'd7) data_addr <= 0;
 	if (reg_sel_d && ~reg_sel && ide_reg == 3'd0) data_addr <= data_addr + 1'd1;
 end
 
+wire [15:0] ide_sec_o;
 dpram #(8,16) ide_databuf (
 	.clock     ( clk            ),
 
 	.address_a ( data_addr      ),
-	.data_a    ( ide_dat_i      ),
-	.wren_a    ( reg_sel && ide_we && ide_reg == 3'd0 ),
+	.data_a    ( cpu_dat_i      ),
+	.wren_a    ( reg_sel && cpu_we && ide_reg == 3'd0 ),
 	.q_a       ( data_out       ),
 
-	.address_b ( ide_data_addr  ),
-	.data_b    ( ide_data_i     ),
-	.wren_b    ( ide_data_we    ),
-	.q_b       ( ide_data_o     )
+	.address_b ( ide_adr[7:0]   ),
+	.data_b    ( ide_dat_i      ),
+	.wren_b    ( ide_we & ~ide_reg_sel ),
+	.q_b       ( ide_sec_o      )
 );
 
 endmodule

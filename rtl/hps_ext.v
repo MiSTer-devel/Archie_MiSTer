@@ -30,20 +30,15 @@ module hps_ext
 	
 	input       [7:0] cmos_cnt,
 
-	input             reset,
+	input             ide_reset,
 	input             ide_req,
 	output reg        ide_ack,
 	output reg        ide_err,
-	output reg  [2:0] ide_reg_i_adr,
-	input       [7:0] ide_reg_i,
-	output reg        ide_reg_we,
-	output reg  [2:0] ide_reg_o_adr,
-	output reg  [7:0] ide_reg_o,
-	output reg  [7:0] ide_data_addr,
-	output reg [15:0] ide_data_o,
-	input      [15:0] ide_data_i,
-	output reg        ide_data_rd,
-	output reg        ide_data_we
+	output reg  [8:0] ide_adr,
+	output reg [15:0] ide_dat_o,
+	input      [15:0] ide_dat_i,
+	output reg        ide_rd,
+	output reg        ide_we
 );
 
 assign EXT_BUS[15:0] = fp_dout_en ? fp_dout : io_dout;
@@ -84,20 +79,18 @@ always@(posedge clk_sys) begin
 			end
 			else begin
 				case(cmd)
-					'h04: begin
-							if(byte_cnt == 1) begin
+					'h04: if(byte_cnt == 1) begin
 								io_dout[7:0] <= { 4'ha, 3'b000, kbd_out_data_available };
 								kbd_out_data_available <= 0;
 							end
 							else begin
 								io_dout[7:0] <= kbd_out_data;
 							end
-						end
 
 					'h05: begin
-							if(byte_cnt == 1) kbd_in_strobe <= 1;
-							kbd_in_data <= io_din[7:0];
-						end
+								if(byte_cnt == 1) kbd_in_strobe <= 1;
+								kbd_in_data <= io_din[7:0];
+							end
 					default: ;
 				endcase
 			end
@@ -105,33 +98,33 @@ always@(posedge clk_sys) begin
 	end
 end
 
-localparam CMD_IDE_REGS_RD     = 8'h80;
-localparam CMD_IDE_REGS_WR     = 8'h90;
-localparam CMD_IDE_DATA_WR     = 8'hA0;
-localparam CMD_IDE_DATA_RD     = 8'hB0;
-localparam CMD_IDE_STATUS_WR   = 8'hF0;
+localparam CMD_IDE_REGS_RD   = 8'h80;
+localparam CMD_IDE_REGS_WR   = 8'h90;
+localparam CMD_IDE_DATA_WR   = 8'hA0;
+localparam CMD_IDE_DATA_RD   = 8'hB0;
+localparam CMD_IDE_STATUS_WR = 8'hF0;
 
-localparam CMD_IDECMD          = 8'h04;
-localparam CMD_IDEDAT          = 8'h08;
+localparam STATUS_CMD = 8'h04;
+localparam STATUS_DAT = 8'h08;
 
 reg [15:0] fp_dout;
 reg        fp_dout_en;
 always@(posedge clk_sys) begin
 	reg [7:0] cmd;
-	reg [3:0] byte_cnt;
+	reg [1:0] byte_cnt;
 	reg       write_start = 0;
 	reg       newcmd = 0;
 	reg       write_req = 0;
 	reg [7:0] ide_cmd;
 
-	ide_reg_we  <= 0;
-	ide_data_we <= 0;
-	ide_data_rd <= 0;
-	ide_ack     <= 0;
-	
-	if(ide_data_we | ide_data_rd) ide_data_addr <= ide_data_addr + 1'd1;
+	ide_we  <= 0;
+	ide_rd  <= 0;
+	ide_ack <= 0;
 
-	if (reset) begin
+	if(ide_we | ide_rd) ide_adr <= ide_adr + 1'd1;
+	if(ide_rd && ide_adr == 9'h107) ide_cmd <= ide_dat_i[7:0];
+
+	if (ide_reset) begin
 		newcmd <= 0;
 		write_req <= 0;
 		write_start <= 0;
@@ -143,71 +136,44 @@ always@(posedge clk_sys) begin
 		write_start <= write_req;
 	end
 
-	if (ide_data_we) newcmd <= 0;
-
-	if (ide_data_rd) begin
-		write_req <= 0;
-		write_start <= 0;
+	if(~ide_adr[8]) begin
+		if (ide_we) newcmd <= 0;
+		if (ide_rd) begin
+			write_req <= 0;
+			write_start <= 0;
+		end
 	end
-	
+
 	if(~fp_enable) begin
 		byte_cnt <= 0;
 		fp_dout <= 0;
 		fp_dout_en <= 0;
 	end
-	else begin
-		if(io_strobe) begin
+	else if(io_strobe) begin
+		fp_dout <= 0;
+		if(~&byte_cnt) byte_cnt <= byte_cnt + 1'd1;
 
-			fp_dout <= 0;
-			if(~&byte_cnt) byte_cnt <= byte_cnt + 1'd1;
-
-			if(byte_cnt == 0) begin
-				cmd <= io_din[15:8];
-				fp_dout_en <= (io_din[15:8] >= CMD_IDE_REGS_RD && io_din[15:8] <= CMD_IDE_STATUS_WR);
-				if(!io_din) begin
-					fp_dout <= {write_start ? CMD_IDEDAT : newcmd ? CMD_IDECMD : 8'h00, cmos_cnt};
-					fp_dout_en <= 1;
-				end
-				if(io_din[15:8] == CMD_IDE_STATUS_WR) begin
-					if (io_din[7]) ide_ack <= 1;   // IDE_STATUS_END
-					if (io_din[4]) newcmd <= 0;    // IDE_STATUS_IRQ
-					if (io_din[2] || ((ide_cmd == 8'h30 || ide_cmd == 8'hc5) && io_din[4] && ~io_din[7])) write_req <= 1;
-					if (io_din[1]) ide_err <= 1;   // IDE_STATUS_ERR
-				end
-				ide_data_addr <= 0;
-				ide_reg_i_adr <= 0;
-				ide_reg_o_adr <= 0;
+		if(!byte_cnt) begin
+			cmd <= io_din[15:8];
+			fp_dout_en <= (io_din[15:8] >= CMD_IDE_REGS_RD && io_din[15:8] <= CMD_IDE_STATUS_WR);
+			if(!io_din) begin
+				fp_dout <= {write_start ? STATUS_DAT : newcmd ? STATUS_CMD : 8'h00, cmos_cnt};
+				fp_dout_en <= 1;
 			end
-			else begin
-				case(cmd)
-					CMD_IDE_REGS_WR:
-						if (byte_cnt >= 4 && byte_cnt <= 9) begin
-							ide_reg_o <= io_din[7:0];
-							ide_reg_o_adr <= ide_reg_o_adr + 1'd1;
-							ide_reg_we <= 1;
-						end
-
-					CMD_IDE_REGS_RD:
-						if(byte_cnt >= 3) begin
-							fp_dout <= ide_reg_i;
-							if (ide_reg_i_adr == 7) ide_cmd <= ide_reg_i;
-							ide_reg_i_adr <= ide_reg_i_adr + 1'd1;
-						end
-
-					CMD_IDE_DATA_WR:
-						if (byte_cnt >= 3) begin
-							ide_data_o <= io_din;
-							ide_data_we <= 1;
-						end
-
-					CMD_IDE_DATA_RD:
-						if (byte_cnt >= 3) begin
-							fp_dout <= ide_data_i;
-							ide_data_rd <= 1;
-						end
-					default: ;
-				endcase
+			if(io_din[15:8] == CMD_IDE_STATUS_WR) begin
+				if (io_din[7]) ide_ack <= 1;   // IDE_STATUS_END
+				if (io_din[4]) newcmd  <= 0;   // IDE_STATUS_IRQ
+				if (io_din[2] || ((ide_cmd == 8'h30 || ide_cmd == 8'hc5) && io_din[4] && ~io_din[7])) write_req <= 1;
+				if (io_din[1]) ide_err <= 1;   // IDE_STATUS_ERR
 			end
+			ide_adr <= {io_din[15:8] == CMD_IDE_REGS_RD || io_din[15:8] == CMD_IDE_REGS_WR, 8'h00};
+		end
+
+		if (&byte_cnt) begin
+			ide_dat_o <= io_din;
+			fp_dout   <= ide_dat_i;
+			ide_we    <= (cmd == CMD_IDE_REGS_WR) || (cmd == CMD_IDE_DATA_WR);
+			ide_rd    <= (cmd == CMD_IDE_REGS_RD) || (cmd == CMD_IDE_DATA_RD);
 		end
 	end
 end

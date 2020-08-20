@@ -248,20 +248,15 @@ hps_ext hps_ext
 
 	.cmos_cnt       ( cmos_cnt       ),
 
-	.reset          ( reset          ),
+	.ide_reset      ( reset          ),
 	.ide_req        ( ide_req        ),
 	.ide_ack        ( ide_ack        ),
 	.ide_err        ( ide_err        ),
-	.ide_reg_o_adr  ( ide_reg_i_adr  ),
-	.ide_reg_o      ( ide_reg_i      ),
-	.ide_reg_we     ( ide_reg_we     ),
-	.ide_reg_i_adr  ( ide_reg_o_adr  ),
-	.ide_reg_i      ( ide_reg_o      ),
-	.ide_data_addr  ( ide_data_addr  ),
-	.ide_data_o     ( ide_data_i     ),
-	.ide_data_i     ( ide_data_o     ),
-	.ide_data_rd    ( ide_data_rd    ),
-	.ide_data_we    ( ide_data_we    )
+	.ide_adr        ( ide_adr        ),
+	.ide_dat_o      ( ide_dat_i      ),
+	.ide_dat_i      ( ide_dat_o      ),
+	.ide_rd         ( ide_rd         ),
+	.ide_we         ( ide_we         )
 );
 
 assign AUDIO_S = 1;
@@ -288,16 +283,11 @@ wire 			i2c_din, i2c_dout, i2c_clock;
 wire        ide_req;
 wire        ide_ack;
 wire        ide_err;
-wire  [2:0] ide_reg_o_adr;
-wire  [7:0] ide_reg_o;
-wire        ide_reg_we;
-wire  [2:0] ide_reg_i_adr;
-wire  [7:0] ide_reg_i;
-wire  [7:0] ide_data_addr;
-wire [15:0] ide_data_o;
-wire [15:0] ide_data_i;
-wire        ide_data_rd;
-wire        ide_data_we;
+wire  [8:0] ide_adr;
+wire [15:0] ide_dat_o;
+wire [15:0] ide_dat_i;
+wire        ide_rd;
+wire        ide_we;
 
 wire        fdd_led;
 
@@ -354,16 +344,11 @@ archimedes_top #(CLKSYS) ARCHIMEDES
 	.ide_req        ( ide_req        ),
 	.ide_ack        ( ide_ack        ),
 	.ide_err        ( ide_err        ),
-	.ide_reg_o_adr  ( ide_reg_o_adr  ),
-	.ide_reg_o      ( ide_reg_o      ),
-	.ide_reg_we     ( ide_reg_we     ),
-	.ide_reg_i_adr  ( ide_reg_i_adr  ),
-	.ide_reg_i      ( ide_reg_i      ),
-	.ide_data_addr  ( ide_data_addr  ),
-	.ide_data_o     ( ide_data_o     ),
-	.ide_data_i     ( ide_data_i     ),
-	.ide_data_rd    ( ide_data_rd    ),
-	.ide_data_we    ( ide_data_we    ),
+	.ide_adr        ( ide_adr        ),
+	.ide_dat_o      ( ide_dat_o      ),
+	.ide_dat_i      ( ide_dat_i      ),
+	.ide_rd         ( ide_rd         ),
+	.ide_we         ( ide_we         ),
 
 	.KBD_OUT_DATA   ( kbd_out_data   ),
 	.KBD_OUT_STROBE ( kbd_out_strobe ),

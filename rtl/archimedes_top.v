@@ -87,16 +87,11 @@ module archimedes_top #(parameter CLKCPU)
 	output         ide_req,      // new command request
 	input          ide_err,
 	input          ide_ack,      // command finished on the IO controller side
-	input    [2:0] ide_reg_o_adr,// requested task file register index
-	output   [7:0] ide_reg_o,    // task file register out
-	input          ide_reg_we,   // task file register write strobe from IO controller
-	input    [2:0] ide_reg_i_adr,
-	input    [7:0] ide_reg_i,    // task file register input
-	input    [7:0] ide_data_addr,
-	output  [15:0] ide_data_o,
-	input   [15:0] ide_data_i,
-	input          ide_data_rd,
-	input          ide_data_we,
+	input    [8:0] ide_adr,
+	output  [15:0] ide_dat_o,
+	input   [15:0] ide_dat_i,
+	input          ide_rd,
+	input          ide_we,
 
 	// connection to keyboard controller
 	output   [7:0] KBD_OUT_DATA,
@@ -386,31 +381,24 @@ fdc1772 #(CLKCPU) FDC1772 (
 
 
 ide IDE (
-
 	.clk            ( CLKCPU_I         ),
 	.reset          ( RESET_I          ),
 
-	.ide_sel        ( podule0_sel      ),
-	.ide_we         ( cpu_we           ),
-	.ide_adr        ( podule_adr       ),
-	.ide_dat_o      ( podule0_rdata    ),
-	.ide_dat_i      ( podule_wdata     ),
+	.cpu_sel        ( podule0_sel      ),
+	.cpu_we         ( cpu_we           ),
+	.cpu_adr        ( podule_adr       ),
+	.cpu_dat_o      ( podule0_rdata    ),
+	.cpu_dat_i      ( podule_wdata     ),
 
 	.ide_req        ( ide_req          ),
 	.ide_ack        ( ide_ack          ),
 	.ide_err        ( ide_err          ),
 
-	.ide_reg_o_adr  ( ide_reg_o_adr    ),
-	.ide_reg_o      ( ide_reg_o        ),
-	.ide_reg_we     ( ide_reg_we       ),
-	.ide_reg_i_adr  ( ide_reg_i_adr    ),
-	.ide_reg_i      ( ide_reg_i        ),
-
-	.ide_data_addr  ( ide_data_addr    ),
-	.ide_data_o     ( ide_data_o       ),
-	.ide_data_i     ( ide_data_i       ),
-	.ide_data_rd    ( ide_data_rd      ),
-	.ide_data_we    ( ide_data_we      )
+	.ide_adr        ( ide_adr          ),
+	.ide_dat_o      ( ide_dat_o        ),
+	.ide_dat_i      ( ide_dat_i        ),
+	.ide_we         ( ide_we           ),
+	.ide_rd         ( ide_rd           )
 );
 
 wire [7:0]	latches_dat_o;
@@ -432,7 +420,7 @@ latches LATCHES(
 	.floppy_motor	( floppy_motor			),
 	.floppy_inuse	( floppy_inuse			),
 	.floppy_side	( floppy_side 			),
-	.floppy_density	( floppy_density	),
+	.floppy_density( floppy_density	   ),
 	.floppy_reset	( floppy_reset			),
 	
 	.joy0				( JOYSTICK0				),

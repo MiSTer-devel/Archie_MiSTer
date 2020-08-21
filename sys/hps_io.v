@@ -105,7 +105,7 @@ module hps_io #(parameter STRLEN=0, PS2DIV=0, WIDE=0, VDNUM=1, PS2WE=0)
 
 	// ARM -> FPGA download
 	output reg        ioctl_download = 0, // signal indicating an active download
-	output reg  [7:0] ioctl_index,        // menu index used to upload the file
+	output reg [15:0] ioctl_index,        // menu index used to upload the file
 	output reg        ioctl_wr,
 	output reg [26:0] ioctl_addr,         // in WIDE mode address will be incremented by 2
 	output reg [DW:0] ioctl_dout,
@@ -593,7 +593,7 @@ always@(posedge clk_sys) begin : fio_block
 
 					FIO_FILE_INDEX:
 						begin
-							ioctl_index <= io_din[7:0];
+							ioctl_index <= io_din[15:0];
 						end
 
 					FIO_FILE_TX:
@@ -636,7 +636,7 @@ always@(posedge clk_sys) begin : fio_block
 						end
 						else begin
 							ioctl_addr <= ioctl_addr + (WIDE ? 2'd2 : 2'd1);
-							fp_dout[DW:0] <= ioctl_din;
+							fp_dout <= ioctl_din;
 							ioctl_rd <= 1;
 						end
 				endcase

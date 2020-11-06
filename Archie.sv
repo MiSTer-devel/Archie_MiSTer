@@ -50,6 +50,7 @@ module emu
 	output        VGA_DE,    // = ~(VBlank | HBlank)
 	output        VGA_F1,
 	output [1:0]  VGA_SL,
+	output        VGA_SCALER, // Force VGA scaler
 
 	output        LED_USER,  // 1 - ON, 0 - OFF.
 
@@ -416,6 +417,7 @@ assign CLK_VIDEO = clk_sys;
 assign CE_PIXEL  = cepix;
 assign VGA_F1 = 0;
 assign VGA_SL = 0;
+assign VGA_SCALER = 1;
 
 gamma_fast gamma
 (

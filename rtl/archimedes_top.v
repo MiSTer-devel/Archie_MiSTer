@@ -344,7 +344,7 @@ wire        floppy_density;
 wire        floppy_reset;
 
 wire        fdc_sel = cpu_stb & cpu_cyc & floppy_en;
-fdc1772 #(CLKCPU) FDC1772 (
+fdc1772 #(.EXT_MOTOR(1'b1)) FDC1772 (
 	.clkcpu         ( CLKCPU_I         ),
 	.clk8m_en       ( ioc_clk8m_en     ),
 
@@ -370,7 +370,7 @@ fdc1772 #(CLKCPU) FDC1772 (
 	.sd_dout_strobe ( sd_buff_wr       ),
 
 	.floppy_drive   ( floppy_drive     ),
-// .floppy_motor   ( floppy_motor     ),
+	.floppy_motor	( !floppy_motor    ),
 // .floppy_inuse   ( floppy_inuse     ),
 	.floppy_side    ( floppy_side      ),
 // .floppy_density ( floppy_density   ),

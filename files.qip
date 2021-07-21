@@ -4,7 +4,8 @@ set_global_assignment -name QIP_FILE rtl/fdc/fdc.qip
 set_global_assignment -name VERILOG_FILE rtl/sdram.v
 set_global_assignment -name VHDL_FILE rtl/bram.vhd
 set_global_assignment -name SYSTEMVERILOG_FILE rtl/EEPROM_24C0x.sv
-set_global_assignment -name SYSTEMVERILOG_FILE rtl/ide.sv
+set_global_assignment -name SYSTEMVERILOG_FILE rtl/podule_ide.sv
+set_global_assignment -name VERILOG_FILE rtl/ide.v
 set_global_assignment -name VERILOG_FILE rtl/latches.v
 set_global_assignment -name VERILOG_FILE rtl/ioc_irq.v
 set_global_assignment -name VERILOG_FILE rtl/ioc.v

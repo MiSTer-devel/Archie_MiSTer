@@ -180,7 +180,7 @@ assign {DDRAM_CLK, DDRAM_BURSTCNT, DDRAM_ADDR, DDRAM_DIN, DDRAM_BE, DDRAM_RD, DD
 assign {SD_SCK, SD_MOSI, SD_CS} = 'Z;
 
 assign LED_USER  = fdd_led;
-assign LED_DISK  = 0;
+assign LED_DISK  = hdd_led;
 assign LED_POWER = 0;
 assign BUTTONS   = 0;
 assign HDMI_FREEZE = 0;
@@ -305,15 +305,12 @@ hps_ext hps_ext
 
 	.cmos_cnt       ( cmos_cnt       ),
 
-	.ide_reset      ( reset          ),
 	.ide_req        ( ide_req        ),
-	.ide_ack        ( ide_ack        ),
-	.ide_err        ( ide_err        ),
-	.ide_adr        ( ide_adr        ),
-	.ide_dat_o      ( ide_dat_i      ),
-	.ide_dat_i      ( ide_dat_o      ),
-	.ide_rd         ( ide_rd         ),
-	.ide_we         ( ide_we         )
+	.ide_addr       ( ide_address    ),
+	.ide_wr         ( ide_write      ),
+	.ide_dout       ( ide_writedata  ),
+	.ide_rd         ( ide_read       ),
+	.ide_din        ( ide_readdata   )
 );
 
 assign AUDIO_S = 1;
@@ -337,16 +334,15 @@ wire  [1:0] selpix;
 
 wire 			i2c_din, i2c_dout, i2c_clock;
 
-wire        ide_req;
-wire        ide_ack;
-wire        ide_err;
-wire  [8:0] ide_adr;
-wire [15:0] ide_dat_o;
-wire [15:0] ide_dat_i;
-wire        ide_rd;
-wire        ide_we;
+wire  [5:0] ide_req;
+wire  [4:0] ide_address;
+wire        ide_write;
+wire [15:0] ide_writedata;
+wire        ide_read;
+wire [15:0] ide_readdata;
 
 wire        fdd_led;
+wire        hdd_led;
 
 archimedes_top #(CLKSYS) ARCHIMEDES
 (
@@ -384,7 +380,8 @@ archimedes_top #(CLKSYS) ARCHIMEDES
 	.I2C_DIN		    ( i2c_dout       ),
 	.I2C_CLOCK	    ( i2c_clock      ),
 
-	.FDD_LED	       ( fdd_led        ),
+	.fdd_led	       ( fdd_led        ),
+	.hdd_led	       ( hdd_led        ),
 
 	.sd_lba         ( sd_lba         ),
 	.sd_rd          ( sd_rd          ),
@@ -399,13 +396,11 @@ archimedes_top #(CLKSYS) ARCHIMEDES
 	.img_wp         ( img_readonly   ),
 
 	.ide_req        ( ide_req        ),
-	.ide_ack        ( ide_ack        ),
-	.ide_err        ( ide_err        ),
-	.ide_adr        ( ide_adr        ),
-	.ide_dat_o      ( ide_dat_o      ),
-	.ide_dat_i      ( ide_dat_i      ),
-	.ide_rd         ( ide_rd         ),
-	.ide_we         ( ide_we         ),
+	.ide_address    ( ide_address    ),
+	.ide_write      ( ide_write      ),
+	.ide_writedata  ( ide_writedata  ),
+	.ide_read       ( ide_read       ),
+	.ide_readdata   ( ide_readdata   ),
 
 	.KBD_OUT_DATA   ( kbd_out_data   ),
 	.KBD_OUT_STROBE ( kbd_out_strobe ),

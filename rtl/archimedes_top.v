@@ -261,13 +261,12 @@ wire [15:0] pod_dat_i;
 wire floppy_firq;
 wire floppy_drq;
 
-wire ioc_clk2m_en, ioc_clk8m_en;
+wire ioc_clk7m_en;
 
 ioc IOC(
 
 	.clkcpu        ( CLKCPU_I           ),
-	.clk2m_en      ( ioc_clk2m_en       ),
-	.clk8m_en      ( ioc_clk8m_en       ),
+	.clk7m_en      ( ioc_clk7m_en       ),
 
 	.por           ( RESET_I            ),
 	.ir            ( vid_flybk          ),
@@ -332,8 +331,8 @@ wire podule0_sel = podules_en && cpu_stb && cpu_cyc && podule_num == PODULE0;
 //wire podule3_sel = podules_en && cpu_stb && cpu_cyc && podule_num == PODULE3;
 
 
-wire [7:0]  floppy_dat_o;
-wire     floppy_en = ioc_cs & ioc_select[1];
+wire  [7:0] floppy_dat_o;
+wire        floppy_en = ioc_cs & ioc_select[1];
 
 // floppy drive signals.
 wire  [3:0] floppy_drive;
@@ -344,9 +343,10 @@ wire        floppy_density;
 wire        floppy_reset;
 
 wire        fdc_sel = cpu_stb & cpu_cyc & floppy_en;
-fdc1772 #(.EXT_MOTOR(1'b1)) FDC1772 (
+fdc1772 #(.EXT_MOTOR(1'b1), .CLK_EN(16'd7000)) FDC1772
+(
 	.clkcpu         ( CLKCPU_I         ),
-	.clk8m_en       ( ioc_clk8m_en     ),
+	.clk8m_en       ( ioc_clk7m_en     ),
 
 	.cpu_sel        ( fdc_sel          ),
 	.cpu_rw         ( !cpu_we          ),
@@ -370,7 +370,7 @@ fdc1772 #(.EXT_MOTOR(1'b1)) FDC1772 (
 	.sd_dout_strobe ( sd_buff_wr       ),
 
 	.floppy_drive   ( floppy_drive     ),
-	.floppy_motor	( !floppy_motor    ),
+	.floppy_motor   ( !floppy_motor    ),
 // .floppy_inuse   ( floppy_inuse     ),
 	.floppy_side    ( floppy_side      ),
 // .floppy_density ( floppy_density   ),
@@ -398,49 +398,48 @@ podule_ide IDE (
 	.ide_readdata   ( ide_readdata     )
 );
 
-wire [7:0]  latches_dat_o;
-wire  latches_en = ioc_cs & ioc_select[5] & (ioc_speed == 2'd2);
+wire [7:0] latches_dat_o;
+wire       latches_en = ioc_cs & ioc_select[5] & (ioc_speed == 2'd2);
 
 latches LATCHES(
 
-	.clkcpu        ( CLKCPU_I           ),
+	.clkcpu        ( CLKCPU_I             ),
 
-	.wb_cyc        ( cpu_cyc & latches_en  ),
-	.wb_stb        ( cpu_stb & latches_en  ),
-	.wb_we         ( cpu_we  & latches_en  ),
+	.wb_cyc        ( cpu_cyc & latches_en ),
+	.wb_stb        ( cpu_stb & latches_en ),
+	.wb_we         ( cpu_we  & latches_en ),
 
-	.wb_dat_i      ( cpu_dat_o[23:16]      ),
-	.wb_dat_o      ( latches_dat_o         ),
-	.wb_adr        ( cpu_address[15:2]     ),
+	.wb_dat_i      ( cpu_dat_o[23:16]     ),
+	.wb_dat_o      ( latches_dat_o        ),
+	.wb_adr        ( cpu_address[15:2]    ),
 
-	.floppy_drive  ( floppy_drive       ),
-	.floppy_motor  ( floppy_motor       ),
-	.floppy_inuse  ( floppy_inuse       ),
-	.floppy_side   ( floppy_side        ),
-	.floppy_density( floppy_density     ),
-	.floppy_reset  ( floppy_reset       ),
+	.floppy_drive  ( floppy_drive         ),
+	.floppy_motor  ( floppy_motor         ),
+	.floppy_inuse  ( floppy_inuse         ),
+	.floppy_side   ( floppy_side          ),
+	.floppy_density( floppy_density       ),
+	.floppy_reset  ( floppy_reset         ),
 
-	.joy0          ( JOYSTICK0          ),
-	.joy1          ( JOYSTICK1          ),
+	.joy0          ( JOYSTICK0            ),
+	.joy1          ( JOYSTICK1            ),
 
-	.baseclk       ( VIDBASECLK_O       ),
-	.syncpol       ( VIDSYNCPOL_O       )
+	.baseclk       ( VIDBASECLK_O         ),
+	.syncpol       ( VIDSYNCPOL_O         )
 );
 
 
-assign MEM_DAT_O  =  cpu_dat_o;
+assign MEM_DAT_O = cpu_dat_o;
+assign cpu_dat_i = floppy_en          ? {24'd0, floppy_dat_o} :
+						 latches_en         ? {24'd0, latches_dat_o} :
+						 podules_en         ? {16'd0, podule_rdata} :
+						 ioc_cs & ~ioc_sext ? {24'd0, ioc_dat_o} :
+						 ram_cs             ? cpu_dout :
+						 32'hFFFF_FFFF;
 
-assign cpu_dat_i  =  floppy_en            ?  {24'd0, floppy_dat_o} :
-							latches_en           ?  {24'd0, latches_dat_o} :
-							podules_en           ?  {16'd0, podule_rdata} :
-							ioc_cs & ~ioc_sext   ?  {24'd0, ioc_dat_o} :
-							ram_cs               ?  cpu_dout :
-							32'hFFFF_FFFF;
+assign I2C_CLOCK = ioc_cout[1];
+assign I2C_DOUT  = ioc_cout[0];
 
-assign I2C_CLOCK  = ioc_cout[1];
-assign I2C_DOUT   = ioc_cout[0];
+assign ioc_cin[5:0] = {ioc_cout[5:2], I2C_CLOCK, I2C_DIN};
+assign fdd_led      = ~floppy_inuse;
 
-assign ioc_cin[5:0]  = {ioc_cout[5:2], I2C_CLOCK, I2C_DIN};
-assign fdd_led       = ~floppy_inuse;
-
-endmodule // archimedes_top
+endmodule

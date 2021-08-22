@@ -420,7 +420,7 @@ wire   cpu_mem_we    = cpu_we & ((phycs & spvmd) | (table_valid & logcs)) & ~rom
 
 assign tablew        = cpu_load & cpu_cyc & cpu_we & spvmd & (cpu_address[25:23] == 3'b111) & (cpu_address[12] == 0) & (cpu_address[7] == 0); // &3800000+ 
 wire   memw          = cpu_load & cpu_cyc & cpu_we & spvmd & (cpu_address[25:21] == 5'b11011); // &3600000
-assign vidw          = cpu_load & cpu_cyc & cpu_we & vidc_cs; // &3400000
+assign vidw          = cpu_cyc  & cpu_we & vidc_cs; // &3400000
 
 // bus chip selects
 wire   logcs         = cpu_address[25] == 1'b0;                                                        // 0000000 - 1FFFFFF

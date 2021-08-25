@@ -418,8 +418,8 @@ assign cpu_err       = cpu_load ? mem_ack_i & err : 1'b0;
 assign cpu_dout      = cache_data[caddr[3:2]];
 wire   cpu_mem_we    = cpu_we & ((phycs & spvmd) | (table_valid & logcs)) & ~romcs;
 
-assign tablew        = cpu_load & cpu_cyc & cpu_we & spvmd & (cpu_address[25:23] == 3'b111) & (cpu_address[12] == 0) & (cpu_address[7] == 0); // &3800000+ 
-wire   memw          = cpu_load & cpu_cyc & cpu_we & spvmd & (cpu_address[25:21] == 5'b11011); // &3600000
+assign tablew        = cpu_cyc & cpu_we & spvmd & (cpu_address[25:23] == 3'b111) & (cpu_address[12] == 0) & (cpu_address[7] == 0); // &3800000+ 
+wire   memw          = cpu_cyc & cpu_we & spvmd & (cpu_address[25:21] == 5'b11011); // &3600000
 assign vidw          = cpu_cyc  & cpu_we & vidc_cs; // &3400000
 
 // bus chip selects

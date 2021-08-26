@@ -361,7 +361,7 @@ assign video_g[1:0] = vidc_colour[5:4];
 assign video_b[3]	  = hicolour ? pix_data_latch[7] : vidc_colour[11];
 assign video_b[2:0] = vidc_colour[10:8];
 
-assign video_en     = enabled;
+assign video_en     = border;
 
 // two dma channels share the vidrq. 
 assign vidrq = vidrq_int | currq_int;

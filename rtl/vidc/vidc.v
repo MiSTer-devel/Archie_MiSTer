@@ -53,10 +53,10 @@ module vidc #(parameter CLKCPU)
 	output 	 	  hsync, // active low
 	output 	 	  vsync, // active low
 
-	output  [3:0] video_r,
-	output  [3:0] video_g,
-	output  [3:0] video_b,
-	output		  video_en,
+	output reg [3:0] video_r,
+	output reg [3:0] video_g,
+	output reg [3:0] video_b,
+	output           video_en,
 
 	input         ceaud,
 
@@ -352,18 +352,32 @@ wire [12:0] vidc_colour = cur_enabled & (csr_lookup != 2'd0) ? cur_palette[csr_l
 // render a hicolour pixel if in hicolour mode, enabled and the cursor isnt being displayed.
 wire   hicolour     = (vidc_cr[3:2] == 2'b11) & enabled_d2 & !(cur_enabled & (csr_lookup != 2'd0));
 								
-assign video_r[3]   = hicolour ? pix_data_latch[4] : vidc_colour[3];
-assign video_r[2:0] = vidc_colour[2:0];
-
-assign video_g[3:2] = hicolour ? pix_data_latch[6:5] : vidc_colour[7:6];
-assign video_g[1:0] = vidc_colour[5:4];
-
-assign video_b[3]	  = hicolour ? pix_data_latch[7] : vidc_colour[11];
-assign video_b[2:0] = vidc_colour[10:8];
-
 assign video_en     = border;
 
 // two dma channels share the vidrq. 
 assign vidrq = vidrq_int | currq_int;
+
+
+always @(posedge clkpix) begin
+	reg [3:0] r1,g1,b1,r2,g2,b2;
+
+	if(cepix) begin
+		r1[3]   <= hicolour ? pix_data_latch[4] : vidc_colour[3];
+		r1[2:0] <= vidc_colour[2:0];
+		g1[3:2] <= hicolour ? pix_data_latch[6:5] : vidc_colour[7:6];
+		g1[1:0] <= vidc_colour[5:4];
+		b1[3]	  <= hicolour ? pix_data_latch[7] : vidc_colour[11];
+		b1[2:0] <= vidc_colour[10:8];
+		
+		r2 <= r1;
+		g2 <= g1;
+		b2 <= b1;
+		
+		video_r <= r2;
+		video_g <= g2;
+		video_b <= b2;
+	end
+end
+
 
 endmodule

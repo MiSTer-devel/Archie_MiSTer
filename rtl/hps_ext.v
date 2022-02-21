@@ -42,7 +42,8 @@ assign EXT_BUS[15:0] = io_dout;
 wire [15:0] io_din = EXT_BUS[31:16];
 assign EXT_BUS[32] = io_dout_en;
 wire io_strobe = EXT_BUS[33];
-wire io_enable = EXT_BUS[34];
+wire io_enable = EXT_BUS[34] | fp_enable;
+wire fp_enable = EXT_BUS[35];
 
 localparam EXT_CMD_MIN = 4;
 localparam EXT_CMD_MAX = 5;
@@ -83,8 +84,9 @@ always@(posedge clk_sys) begin
 
 			if(byte_cnt == 0) begin
 				cmd <= io_din[7:0];
-				io_dout_en <= (io_din >= EXT_CMD_MIN && io_din <= EXT_CMD_MAX) || (io_din >= EXT_CMD_MIN2 && io_din <= EXT_CMD_MAX2);
+				io_dout_en <= fp_enable ? !io_din : ((io_din >= EXT_CMD_MIN && io_din <= EXT_CMD_MAX) || (io_din >= EXT_CMD_MIN2 && io_din <= EXT_CMD_MAX2));
 				if(io_din == 'h63) io_dout <= {4'hE, 2'b00, 2'b00, 2'b00, ide_req};
+				if(io_din == 'h00) io_dout <= cmos_cnt;
 			end
 			else begin
 				case(cmd)

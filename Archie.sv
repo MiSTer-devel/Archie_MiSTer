@@ -278,7 +278,7 @@ wire [31:0] vratio[16] =
 
 wire [3:0] vmode = {pixbaseclk_select,selpix};
 
-localparam  CLKSYS = 42000000;
+localparam  CLKSYS = 35000000;
 
 reg         cepix;
 reg  [31:0] vclk, vsum;

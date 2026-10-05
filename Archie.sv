@@ -323,7 +323,7 @@ assign CLK_VIDEO = clk_sys;
 assign CE_PIXEL  = cepix;
 assign VGA_F1 = 0;
 assign VGA_SL = 0;
-assign VGA_SCALER = 1;
+assign VGA_SCALER = 0;
 
 gamma_fast gamma
 (

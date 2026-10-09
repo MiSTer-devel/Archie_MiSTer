@@ -46,7 +46,7 @@ module vidc_timing(
 		output        o_flyback
     );
 
-reg [9:0] hcount;
+reg [10:0] hcount;
 reg [9:0] vcount;
 
 // register locations
@@ -77,12 +77,12 @@ reg [9:0]		vidc_vder; // vertical display end
 reg [9:0]		vidc_vber; // vertical border end
 
 // horizontal registers 
-reg [9:0]		vidc_hcr;  //  horizontal cycle register
-reg [9:0]		vidc_hswr; // horizontal sync width
-reg [9:0]		vidc_hbsr; // horizontal border start
-reg [9:0]		vidc_hdsr; // horizontal display start
-reg [9:0]		vidc_hder; // horizontal display end
-reg [9:0]		vidc_hber; // horizontal border end
+reg [10:0]		vidc_hcr;  // horizontal cycle register
+reg [10:0]		vidc_hswr; // horizontal sync width
+reg [10:0]		vidc_hbsr; // horizontal border start
+reg [10:0]		vidc_hdsr; // horizontal display start
+reg [10:0]		vidc_hder; // horizontal display end
+reg [10:0]		vidc_hber; // horizontal border end
 
 // cursor registers 
 reg [10:0]		vidc_hcsr; // horizontal cursor start
@@ -98,12 +98,12 @@ initial begin
 	vidc_vder	= 10'd0; // vertical display end
 	vidc_vber	= 10'd0; // vertical border end
 
-	vidc_hcr    = 10'd0; // horizontal cycle register
-	vidc_hswr	= 10'd0; // horizontal sync width
-	vidc_hbsr	= 10'd0; // horizontal border start
-	vidc_hdsr	= 10'd0; // horizontal display start
-	vidc_hder	= 10'd0; // horizontal display end
-	vidc_hber	= 10'd0; // horizontal border end
+	vidc_hcr    = 11'd0; // horizontal cycle register
+	vidc_hswr	= 11'd0; // horizontal sync width
+	vidc_hbsr	= 11'd0; // horizontal border start
+	vidc_hdsr	= 11'd0; // horizontal display start
+	vidc_hder	= 11'd0; // horizontal display end
+	vidc_hber	= 11'd0; // horizontal border end
 	
 	vidc_hcsr	= 11'd0; // horizontal cursor start
 	vidc_vcsr	= 10'd0;  // vertical cursor start
@@ -128,12 +128,12 @@ always @(posedge clkcpu) begin
 				VIDEO_VDER: 	vidc_vder <= cpu_dat[23:14];
 				
 				// horizontal timing
-				VIDEO_HCR: 		vidc_hcr  <= {cpu_dat[22:14], 1'b0};
-				VIDEO_HSWR: 	vidc_hswr <= {cpu_dat[22:14], 1'b0};
-				VIDEO_HBSR: 	vidc_hbsr <= {cpu_dat[22:14], 1'b0};
-				VIDEO_HBER: 	vidc_hber <= {cpu_dat[22:14], 1'b0};
-				VIDEO_HDSR: 	vidc_hdsr <= {cpu_dat[22:14], 1'b0};
-				VIDEO_HDER: 	vidc_hder <= {cpu_dat[22:14], 1'b0};
+				VIDEO_HCR: 		vidc_hcr  <= {cpu_dat[23:14], 1'b0};
+				VIDEO_HSWR: 	vidc_hswr <= {cpu_dat[23:14], 1'b0};
+				VIDEO_HBSR: 	vidc_hbsr <= {cpu_dat[23:14], 1'b0};
+				VIDEO_HBER: 	vidc_hber <= {cpu_dat[23:14], 1'b0};
+				VIDEO_HDSR: 	vidc_hdsr <= {cpu_dat[23:14], 1'b0};
+				VIDEO_HDER: 	vidc_hder <= {cpu_dat[23:14], 1'b0};
 				
 				VIDEO_HCSR: 	vidc_hcsr <= cpu_dat[23:13];
 					
@@ -187,7 +187,7 @@ always @(posedge clkvid) begin
 		if (hcount == vidc_hber) hborder <= 0;
 		if (hcount == vidc_hdsr) hdisplay <= 1;
 		if (hcount == vidc_hder) hdisplay <= 0;
-		if ({1'b0, hcount} == vidc_hcsr) hcursor <= 1;
+		if (hcount == vidc_hcsr) hcursor <= 1;
 		if (hcount == vidc_hswr) hsync <= 0;
 
 		if (hcount == vidc_hcr) begin

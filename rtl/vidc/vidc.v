@@ -129,8 +129,9 @@ assign   selpix = vidc_cr[1:0];
 
 // Mode 23 serializes the selected palette entry's red bits as four adjacent
 // monochrome dots. The VIDC timing grid remains at 24 MHz.
+wire hires_geometry;
 assign hires_mono = (baseclk == 2'd0) && (vidc_cr[3:2] == 2'b10) &&
-	                  (vidc_cr[1:0] == 2'b11);
+	                  (vidc_cr[1:0] == 2'b11) && hires_geometry;
 
 vidc_timing TIMING(
 	
@@ -148,7 +149,8 @@ vidc_timing TIMING(
 	.o_flyback	( flybk		),
 	.o_enabled	( enabled	),
 	.o_cursor	( cur_enabled ),
-	.o_border	( border		)
+	.o_border	( border		),
+	.o_hires_geometry ( hires_geometry )
 );
 
 // this module does the math for a DMA channel

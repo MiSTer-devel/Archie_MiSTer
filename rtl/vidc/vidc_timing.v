@@ -44,7 +44,8 @@ module vidc_timing(
 		output        o_cursor,
 		output        o_enabled,
 		output        o_border,
-		output        o_flyback
+		output        o_flyback,
+		output        o_hires_geometry
     );
 
 reg [10:0] hcount;
@@ -179,6 +180,12 @@ wire [10:0] display_pipeline = pixel_depth == 2'b11 ? 11'd4  :
 wire [10:0] hdsr_end = vidc_hdsr + display_pipeline;
 wire [10:0] hder_end = vidc_hder + display_pipeline;
 wire [10:0] hcsr_end = vidc_hcsr + 11'd5;
+
+// Mode 23 uses a 24 MHz timing grid and an external 4:1 serializer. Its
+// approximately 388-by-950 cycle geometry distinguishes it from normal
+// 24 MHz 4-bpp colour modes, which must retain their standard palette path.
+assign o_hires_geometry = (vidc_hcr >= 11'd384) && (vidc_hcr <= 11'd400) &&
+	                         (vidc_vcr >= 10'd940) && (vidc_vcr <= 10'd960);
 
 always @(posedge clkvid) begin
 

@@ -113,6 +113,11 @@ wire        video_dma_ip    = cur_load | vid_load;
 wire        sound_dma_ip    = snd_load;
 wire        phycs, tablew, romcs, memcw;
 
+// A MEMC video request is a four-word burst. Flyback must prevent a new
+// burst, but must never discard one that SDRAM has already accepted.
+reg         flybk_d;
+reg         video_frame_reset_pending;
+
 // register addresses.
 localparam REG_Vinit 	= 3'b000;
 localparam REG_Vstart	= 3'b001;
@@ -169,6 +174,8 @@ always @(posedge clkcpu) begin : block
 		memc_control[11] <= 1'b0; // disable sound dma on reset.
 
       dma_request_r <= 1'b0;
+		flybk_d <= 1'b1;
+		video_frame_reset_pending <= 1'b0;
 		cache_rcv <= 0;
       cache_valid <= 0;
 		cache_test <= 0;
@@ -178,6 +185,17 @@ always @(posedge clkcpu) begin : block
 		dma_ack_r = 4'd0; // video init.
 
 	end else begin 
+		flybk_d <= flybk;
+
+		// Hardware reloads Vptr at the end of flyback. Defer the reload until
+		// the current video/cursor burst is quiescent, preserving its ownership.
+		if (flybk_d & ~flybk)
+			video_frame_reset_pending <= 1'b1;
+		if (video_frame_reset_pending & ~video_dma_ip) begin
+			vid_address <= vid_init;
+			cur_address <= cur_init;
+			video_frame_reset_pending <= 1'b0;
+		end
 
 		if(cache_rcv & mem_ack_i) begin
 			cache_data[cache_wraddr] <= mem_dat_i;
@@ -278,24 +296,6 @@ always @(posedge clkcpu) begin : block
 			cache_test <= 0;
 		end 
 	
-		// video dma stuff.
-		if (flybk == 1'b1) begin
-
-			// stop all video dma on flybk
-			vid_address <= vid_init;
-			cur_address <= cur_init;
-			
-			if (vid_load | cur_load) begin
-		   
-				dma_ack_r 	<= 4'd0;
-			
-			end
-			
-			vid_load <= 1'b0;
-			cur_load <= 1'b0;
-      
-		end 
-
 		// do the dma count for all cycle types.
 		if (dma_in_progress & mem_ack_i) begin 
 			
@@ -315,9 +315,9 @@ always @(posedge clkcpu) begin : block
 		if (dma_request_r === 1'b1) begin
 		
 			// priority is to video over sound.
-			if (vidrq  & ~dma_in_progress & ~cpu_load) begin
+			if (vidrq & ~flybk & ~dma_in_progress & ~cpu_load) begin
 				vid_load <= 1'b1;
-			end else if (currq & ~dma_in_progress & ~cpu_load) begin
+			end else if (currq & ~flybk & ~dma_in_progress & ~cpu_load) begin
 				cur_load <= 1'b1;
 			end else if (sndrq  & ~dma_in_progress & ~cpu_load) begin
 				

@@ -32,7 +32,10 @@ module vidc #(parameter CLKCPU)
 
 	input 		  clkpix,
 	input         cepix,
+	input         cevid,
 	output  [1:0] selpix,
+	output        hires_mono,
+	input   [1:0] baseclk,
 	input         clkaud,
 	
 	// "wishbone" interface
@@ -124,6 +127,11 @@ vidc_command_fifo VIDEO_COMMANDS
 
 assign   selpix = vidc_cr[1:0];
 
+// Mode 23 serializes the selected palette entry's red bits as four adjacent
+// monochrome dots. The VIDC timing grid remains at 24 MHz.
+assign hires_mono = (baseclk == 2'd0) && (vidc_cr[3:2] == 2'b10) &&
+	                  (vidc_cr[1:0] == 2'b11);
+
 vidc_timing TIMING(
 	
 	.clkcpu		( clkpix		),
@@ -131,7 +139,7 @@ vidc_timing TIMING(
 	.cpu_dat 	( vid_cpu_dat	),
 
 	.clkvid		( clkpix		),
-	.cevid		( cepix		),
+	.cevid		( cevid		),
 	.rst			( rst_vid_i	),
 	.pixel_depth ( vidc_cr[3:2] ),
 	
@@ -150,7 +158,7 @@ vidc_dmachannel VIDEODMA (
 	.rst_dev	   ( flybk | rst_vid_i ),
 	.clkcpu		( clkcpu    ),
 	.clkdev		( clkpix    ),
-	.cedev		( cepix     ),
+	.cedev		( cevid     ),
 
 	.cpu_data	( viddat    ),
 	.ak			( vidak     ),
@@ -168,7 +176,7 @@ vidc_dmachannel #(.FIFO_SIZE(2)) CURSORDMA (
 	.rst_dev		( flybk | rst_vid_i ),
 	.clkcpu		( clkcpu    ),
 	.clkdev		( clkpix    ),
-	.cedev		( cepix     ),
+	.cedev		( cevid     ),
 
 	.cpu_data	( viddat    ),
 	.ak			( curak     ),
@@ -289,7 +297,7 @@ end
 // this simulates the DAC.
 always @(posedge clkpix) begin
 
-	if(cepix) begin
+	if(cevid) begin
 		cur_enabled_r <= cur_enabled;
 		pix_load 	<= pix_ack;
 		csr_load		<= csr_ack;
@@ -366,6 +374,14 @@ wire [3:0] pix_lookup = vidc_cr[3:2] == 2'b00 ? {3'd0, pix_data_latch[0]} :
 
 wire [1:0] csr_lookup = csr_data_latch[1:0];
 
+reg [1:0] mono_phase = 0;
+always @(posedge clkpix) begin
+	if(!hsync) mono_phase <= 0;
+	else if(cepix && hires_mono) mono_phase <= mono_phase + 1'd1;
+	else if(!hires_mono) mono_phase <= 0;
+end
+wire mono_dot = vidc_palette[pix_data_latch[3:0]][mono_phase];
+
 wire [12:0] vidc_colour = cur_enabled & (csr_lookup != 2'd0) ? cur_palette[csr_lookup]   :
 								  enabled_d2 ? vidc_palette[pix_lookup] : 
 								  border  ? vidc_border : 
@@ -380,12 +396,18 @@ always @(posedge clkpix) begin
 	reg [3:0] r1,g1,b1,r2,g2,b2;
 
 	if(cepix) begin
-		r1[3]   <= hicolour ? pix_data_latch[4] : vidc_colour[3];
-		r1[2:0] <= vidc_colour[2:0];
-		g1[3:2] <= hicolour ? pix_data_latch[6:5] : vidc_colour[7:6];
-		g1[1:0] <= vidc_colour[5:4];
-		b1[3]	  <= hicolour ? pix_data_latch[7] : vidc_colour[11];
-		b1[2:0] <= vidc_colour[10:8];
+		if(hires_mono && enabled_d2 && !(cur_enabled & (csr_lookup != 2'd0))) begin
+			r1 <= {4{mono_dot}};
+			g1 <= {4{mono_dot}};
+			b1 <= {4{mono_dot}};
+		end else begin
+			r1[3]   <= hicolour ? pix_data_latch[4] : vidc_colour[3];
+			r1[2:0] <= vidc_colour[2:0];
+			g1[3:2] <= hicolour ? pix_data_latch[6:5] : vidc_colour[7:6];
+			g1[1:0] <= vidc_colour[5:4];
+			b1[3]	  <= hicolour ? pix_data_latch[7] : vidc_colour[11];
+			b1[2:0] <= vidc_colour[10:8];
+		end
 		
 		r2 <= r1;
 		g2 <= g1;

@@ -1,6 +1,6 @@
 // Reconfigurable native video PLL.
 //
-// The PLL starts at the highest normal VIDC parent frequency so TimeQuest
+// The PLL starts at the Mode 23 parent frequency so TimeQuest
 // analyses the complete video domain. The runtime controller selects the
 // parent frequency required by the programmed VIDC base-clock family.
 module video_pll (
@@ -19,17 +19,17 @@ module video_pll (
 		.pll_dsm_out_sel("1st_order"),
 		.operation_mode("direct"),
 		.number_of_clocks(1),
-		.output_clock_frequency0("72.000000 MHz"),
+		.output_clock_frequency0("96.000000 MHz"),
 		.phase_shift0("0 ps"),
 		.duty_cycle0(50),
 		.pll_type("Cyclone V"),
 		.pll_subtype("Reconfigurable"),
-		// 50 MHz * (11 + 0.52) / 8 = 72 MHz.
+		// 50 MHz * (11 + 0.52) / 6 = 96 MHz.
 		.m_cnt_hi_div(6), .m_cnt_lo_div(5),
 		.n_cnt_hi_div(256), .n_cnt_lo_div(256),
 		.m_cnt_bypass_en("false"), .n_cnt_bypass_en("true"),
 		.m_cnt_odd_div_duty_en("true"), .n_cnt_odd_div_duty_en("false"),
-		.c_cnt_hi_div0(4), .c_cnt_lo_div0(4),
+		.c_cnt_hi_div0(3), .c_cnt_lo_div0(3),
 		.c_cnt_prst0(1), .c_cnt_ph_mux_prst0(0),
 		.c_cnt_in_src0("ph_mux_clk"),
 		.c_cnt_bypass_en0("false"), .c_cnt_odd_div_duty_en0("false"),

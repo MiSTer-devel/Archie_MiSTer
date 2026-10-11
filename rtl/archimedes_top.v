@@ -26,7 +26,9 @@ module archimedes_top #(parameter CLKCPU)
 
 	input          CLKPIX_I,
 	input          CEPIX_I,
+	input          CEVID_I,
 	output   [1:0] SELPIX_O,
+	output         HIRES_MONO_O,
 
 	input          CLKAUD_I,
 	input          CEAUD_I,
@@ -234,7 +236,10 @@ vidc #(CLKCPU) VIDC
 (
 	.clkpix    ( CLKPIX_I  ),
 	.cepix     ( CEPIX_I   ),
+	.cevid     ( CEVID_I   ),
 	.selpix    ( SELPIX_O  ),
+	.hires_mono( HIRES_MONO_O ),
+	.baseclk   ( VIDBASECLK_O ),
 
 	.clkaud    ( CLKAUD_I  ),
 	.ceaud     ( CEAUD_I   ),

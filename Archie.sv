@@ -74,6 +74,11 @@ wire [31:0] video_cfg_writedata;
 wire [31:0] video_cfg_readdata;
 wire video_cfg_busy;
 wire [1:0] pixbaseclk_select;
+wire hires_mono;
+(* altera_attribute = "-name SYNCHRONIZER_IDENTIFICATION FORCED" *)
+reg hires_mono_sys_sync1 = 0;
+(* altera_attribute = "-name SYNCHRONIZER_IDENTIFICATION FORCED" *)
+reg hires_mono_sys_sync2 = 0;
 
 pll pll
 (
@@ -124,8 +129,14 @@ pll_cfg VIDEO_PLL_CFG
 );
 
 // VIDC base-clock families 0 and 3 use a 48 MHz parent, family 1 uses
-// 50.35 MHz, and family 2 uses 72 MHz.
-wire [1:0] desired_video_profile = (pixbaseclk_select == 2'd1) ? 2'd1 :
+// 50.35 MHz, and family 2 uses 72 MHz. Mode 23 uses 96 MHz to serialize
+// four monochrome dots from each 24 MHz VIDC pixel period.
+always @(posedge clk_sys) begin
+	hires_mono_sys_sync1 <= hires_mono;
+	hires_mono_sys_sync2 <= hires_mono_sys_sync1;
+end
+wire [1:0] desired_video_profile = hires_mono_sys_sync2 ? 2'd3 :
+	                                 (pixbaseclk_select == 2'd1) ? 2'd1 :
 	                                 (pixbaseclk_select == 2'd2) ? 2'd2 : 2'd0;
 video_pll_profile VIDEO_PLL_PROFILE
 (
@@ -244,6 +255,7 @@ wire [2:0]	core_cti_o;
 wire [31:0] core_data_in, core_data_out;
 wire [31:0] ram_data_in;
 wire [23:2] core_address_out;
+wire CE_VIDC;
 
 wire  [1:0] selpix;
 
@@ -274,7 +286,9 @@ archimedes_top #(CLKSYS) ARCHIMEDES
 	.CLKCPU_I	    ( clk_sys        ),
 	.CLKPIX_I	    ( CLK_VIDEO      ),
 	.CEPIX_I	 	    ( CE_PIXEL       ),
+	.CEVID_I         ( CE_VIDC        ),
 	.SELPIX_O	    ( selpix         ), 
+	.HIRES_MONO_O    ( hires_mono     ),
 
 	.CLKAUD_I	    ( clk_sys        ),
 	.CEAUD_I	 	    ( ceaud          ),
@@ -355,6 +369,7 @@ wire [3:0] vmode = {pixbaseclk_video,selpix};
 localparam  CLKSYS = 42000000;
 
 reg         cepix_native = 0;
+reg         cevid_native = 0;
 reg  [2:0]  pixel_count = 0;
 wire [2:0]  pixel_divisor = (selpix == 2'd0) ? 3'd6 :
 	                            (selpix == 2'd1) ? 3'd4 :
@@ -365,12 +380,21 @@ wire [31:0] video_clock_hz = (pixbaseclk_video == 2'd1) ? 32'd50350000 :
 always @(posedge CLK_VIDEO) begin
 	if(video_reset) begin
 		cepix_native <= 0;
+		cevid_native <= 0;
 		pixel_count <= 0;
 	end else begin
 		cepix_native <= 0;
-		if(pixel_count == pixel_divisor - 1'd1) begin
+		cevid_native <= 0;
+		if(hires_mono) begin
+			cepix_native <= 1;
+			if(pixel_count == 3) begin
+				pixel_count <= 0;
+				cevid_native <= 1;
+			end else pixel_count <= pixel_count + 1'd1;
+		end else if(pixel_count == pixel_divisor - 1'd1) begin
 			pixel_count <= 0;
 			cepix_native <= 1;
+			cevid_native <= 1;
 		end
 		else pixel_count <= pixel_count + 1'd1;
 	end
@@ -418,6 +442,7 @@ always @(posedge CLK_VIDEO) begin
 end
 
 assign CE_PIXEL  = (status[4] || !allow60) ? cepix_native : cepix_60;
+assign CE_VIDC   = (status[4] || !allow60) ? cevid_native : cepix_60;
 assign VGA_F1 = 0;
 assign VGA_SL = 0;
 assign VGA_SCALER = 0;

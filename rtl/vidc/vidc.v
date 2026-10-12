@@ -133,6 +133,7 @@ vidc_timing TIMING(
 	.clkvid		( clkpix		),
 	.cevid		( cepix		),
 	.rst			( rst_vid_i	),
+	.pixel_depth ( vidc_cr[3:2] ),
 	
 	.o_hsync		( hsync		),
 	.o_vsync		( vsync		),

@@ -36,6 +36,7 @@ module vidc_timing(
 		input 			clkvid,
 		input			cevid,
 		input			rst,
+		input [1:0]	pixel_depth,
 
 		output        o_vsync,
 		output        o_hsync, 
@@ -164,6 +165,21 @@ assign o_border = hborder & vborder;
 assign o_vsync = ~vsync;
 assign o_hsync = ~hsync;
 
+// VIDC uses distinct encodings for cycle/sync, border and display timing.
+// Display timing additionally includes the colour-depth dependent serializer
+// pipeline. These values are compare positions, hence one less than their
+// corresponding physical pipeline offsets.
+wire [10:0] hcr_end  = vidc_hcr  + 11'd1;
+wire [10:0] hswr_end = vidc_hswr + 11'd1;
+wire [10:0] hbsr_end = vidc_hbsr;
+wire [10:0] hber_end = vidc_hber;
+wire [10:0] display_pipeline = pixel_depth == 2'b11 ? 11'd4  :
+	                             pixel_depth == 2'b10 ? 11'd6  :
+	                             pixel_depth == 2'b01 ? 11'd10 : 11'd18;
+wire [10:0] hdsr_end = vidc_hdsr + display_pipeline;
+wire [10:0] hder_end = vidc_hder + display_pipeline;
+wire [10:0] hcsr_end = vidc_hcsr + 11'd5;
+
 always @(posedge clkvid) begin
 
 	if (rst) begin
@@ -183,14 +199,14 @@ always @(posedge clkvid) begin
 		// video frame control
 
 		hcount <= hcount + 1'd1;
-		if (hcount == vidc_hbsr) hborder <= 1;
-		if (hcount == vidc_hber) hborder <= 0;
-		if (hcount == vidc_hdsr) hdisplay <= 1;
-		if (hcount == vidc_hder) hdisplay <= 0;
-		if (hcount == vidc_hcsr) hcursor <= 1;
-		if (hcount == vidc_hswr) hsync <= 0;
+		if (hcount == hbsr_end) hborder <= 1;
+		if (hcount == hber_end) hborder <= 0;
+		if (hcount == hdsr_end) hdisplay <= 1;
+		if (hcount == hder_end) hdisplay <= 0;
+		if (hcount == hcsr_end) hcursor <= 1;
+		if (hcount == hswr_end) hsync <= 0;
 
-		if (hcount == vidc_hcr) begin
+		if (hcount == hcr_end) begin
 			hcount <= 0;
 			hcursor <= 0;
 			hsync <= 1;

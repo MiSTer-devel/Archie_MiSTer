@@ -425,6 +425,18 @@ always @(posedge clkpix) begin
 	else if(cepix && hires_mono) mono_phase <= mono_phase + 1'd1;
 	else if(!hires_mono) mono_phase <= 0;
 end
+
+// The Mode 23 monochrome DAC has three native-dot output registers (r1,
+// r2 and video_rgb below).  Delay DE by the same amount so its left edge
+// begins with the first desktop dot rather than the final border dots.
+reg [2:0] hires_de_pipe = 3'd0;
+always @(posedge clkpix) begin
+	if (rst_vid_i)
+		hires_de_pipe <= 3'd0;
+	else if (cepix)
+		hires_de_pipe <= {hires_de_pipe[1:0], enabled_d2};
+end
+
 wire [1:0] cursor_lookup = hires_mono ? hires_csr_lookup : csr_lookup;
 wire cursor_opaque = hires_mono ? hires_cursor_opaque :
 							 (cur_enabled & (csr_lookup != 2'd0));
@@ -441,10 +453,10 @@ wire [12:0] vidc_colour = cursor_opaque ? cur_palette[cursor_lookup]   :
 wire   hicolour     = (vidc_cr[3:2] == 2'b11) & enabled_d2 & !cursor_opaque;
 								
 // In Mode 23 the MiSTer output must describe the 1152x896 desktop, not the
-// surrounding VIDC border.  enabled_d2 is the same pipeline-aligned window
-// that selects desktop pixels above, so this crops only the output geometry
-// and leaves sync, HCSR and cursor timing unchanged.
-assign video_en     = hires_mono ? enabled_d2 : border;
+// surrounding VIDC border.  The DE pipe follows the monochrome RGB DAC,
+// so this crops only the output geometry and leaves sync, HCSR and cursor
+// timing unchanged.
+assign video_en     = hires_mono ? hires_de_pipe[2] : border;
 
 always @(posedge clkpix) begin
 	reg [3:0] r1,g1,b1,r2,g2,b2;

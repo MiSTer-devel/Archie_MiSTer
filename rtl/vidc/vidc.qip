@@ -3,5 +3,6 @@ set_global_assignment -name VERILOG_FILE [file join $::quartus(qip_path) vidc_fi
 set_global_assignment -name VERILOG_FILE [file join $::quartus(qip_path) vidc_async_fifo.v ]
 set_global_assignment -name VERILOG_FILE [file join $::quartus(qip_path) vidc_command_fifo.v ]
 set_global_assignment -name VERILOG_FILE [file join $::quartus(qip_path) vidc_timing.v ]
+set_global_assignment -name VERILOG_FILE [file join $::quartus(qip_path) mode23_cursor_serializer.v ]
 set_global_assignment -name VERILOG_FILE [file join $::quartus(qip_path) vidc_audio.v ]
 set_global_assignment -name VERILOG_FILE [file join $::quartus(qip_path) vidc.v ]

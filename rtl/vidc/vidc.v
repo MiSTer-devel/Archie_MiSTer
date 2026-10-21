@@ -440,7 +440,11 @@ wire [12:0] vidc_colour = cursor_opaque ? cur_palette[cursor_lookup]   :
 // render a hicolour pixel if in hicolour mode, enabled and the cursor isnt being displayed.
 wire   hicolour     = (vidc_cr[3:2] == 2'b11) & enabled_d2 & !cursor_opaque;
 								
-assign video_en     = border;
+// In Mode 23 the MiSTer output must describe the 1152x896 desktop, not the
+// surrounding VIDC border.  enabled_d2 is the same pipeline-aligned window
+// that selects desktop pixels above, so this crops only the output geometry
+// and leaves sync, HCSR and cursor timing unchanged.
+assign video_en     = hires_mono ? enabled_d2 : border;
 
 always @(posedge clkpix) begin
 	reg [3:0] r1,g1,b1,r2,g2,b2;

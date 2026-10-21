@@ -182,8 +182,14 @@ wire [10:0] hber_end = vidc_hber;
 wire [10:0] display_pipeline = pixel_depth == 2'b11 ? 11'd4  :
 	                             pixel_depth == 2'b10 ? 11'd6  :
 	                             pixel_depth == 2'b01 ? 11'd10 : 11'd18;
-wire [10:0] hdsr_end = vidc_hdsr + display_pipeline;
-wire [10:0] hder_end = vidc_hder + display_pipeline;
+// Mode 23's 24 MHz display path reaches the DAC two timing cells later than
+// the cursor path.  Move only the active display window two cells earlier:
+// 2 * 4 serializer dots = 8 native dots.  Keep the timing registers and
+// HCSR untouched so the cursor remains in the VIDC-programmed position.
+wire [10:0] mode23_display_offset =
+	(pixel_depth == 2'b10) && o_hires_geometry ? 11'd2 : 11'd0;
+wire [10:0] hdsr_end = vidc_hdsr + display_pipeline - mode23_display_offset;
+wire [10:0] hder_end = vidc_hder + display_pipeline - mode23_display_offset;
 wire mode23_hcsr = (pixel_depth == 2'b10) && o_hires_geometry;
 wire [10:0] hcsr_base = vidc_hcsr[12:2];
 assign o_cursor_phase = mode23_hcsr ? vidc_hcsr[1:0] : 2'd0;

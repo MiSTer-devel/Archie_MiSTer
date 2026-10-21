@@ -18,12 +18,14 @@ module video_pll_profile (
 	//   0: 50 * (11 + 0.52)  / 12 = 48.000 MHz
 	//   1: 50 * (12 + 0.084) / 12 = 50.350 MHz
 	//   2: 50 * (11 + 0.52)  /  8 = 72.000 MHz
+	//   3: 50 * (11 + 0.52)  /  6 = 96.000 MHz (Mode 23 serializer)
 	localparam [31:0] M_48  = 32'h0002_0605;
 	localparam [31:0] K_48  = 32'd2233382994;
 	localparam [31:0] M_VGA = 32'h0000_0606;
 	localparam [31:0] K_VGA = 32'd360777253;
 	localparam [31:0] C_12  = 32'h0000_0606;
 	localparam [31:0] C_8   = 32'h0000_0404;
+	localparam [31:0] C_6   = 32'h0000_0303;
 
 	localparam [2:0] BOOT_WAIT = 3'd0, IDLE = 3'd1, WRITE_M = 3'd2,
 	                 WRITE_K = 3'd3, WRITE_C = 3'd4, START = 3'd5,
@@ -36,8 +38,8 @@ module video_pll_profile (
 	always @(posedge clk) begin
 		if(reset) begin
 			state          <= BOOT_WAIT;
-			active_profile <= 2'd2;
-			target_profile <= 2'd2;
+			active_profile <= 2'd3;
+			target_profile <= 2'd3;
 			busy           <= 1'b1;
 			write          <= 1'b0;
 			address        <= 6'd0;
@@ -82,7 +84,8 @@ module video_pll_profile (
 					if(!write) begin
 						write <= 1'b1;
 						address <= C_REG;
-						writedata <= (target_profile == 2'd2) ? C_8 : C_12;
+						writedata <= (target_profile == 2'd3) ? C_6 :
+						             (target_profile == 2'd2) ? C_8 : C_12;
 					end else if(!waitrequest) begin
 						write <= 1'b0;
 						state <= START;

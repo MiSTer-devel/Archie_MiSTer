@@ -32,7 +32,10 @@ module vidc #(parameter CLKCPU)
 
 	input 		  clkpix,
 	input         cepix,
+	input         cevid,
 	output  [1:0] selpix,
+	output        hires_mono,
+	input   [1:0] baseclk,
 	input         clkaud,
 	
 	// "wishbone" interface
@@ -76,6 +79,8 @@ wire cur_enabled;
 reg  cur_enabled_r;
 wire enabled;
 wire border;
+wire [1:0] cursor_phase;
+wire cursor_fetch_enabled;
 
 // registers 
 reg [12:0] 		vidc_palette[0:15];	// palette register.
@@ -105,6 +110,10 @@ reg  [3:0] 		csr_load_count;
 wire [7:0] 		csr_data;
 reg  [2:0] 		csr_shift_count;
 reg  [7:0] 		csr_data_latch = 8'd0;
+reg  [3:0]        hires_cursor_req_count = 0;
+reg  [3:0]        hires_cursor_load_count = 0;
+reg  [63:0]       hires_cursor_row = 0;
+reg               hires_cursor_row_valid = 0;
 
 // internal data request lines
 wire        vid_wr;
@@ -124,6 +133,12 @@ vidc_command_fifo VIDEO_COMMANDS
 
 assign   selpix = vidc_cr[1:0];
 
+// Mode 23 serializes the selected palette entry's red bits as four adjacent
+// monochrome dots. The VIDC timing grid remains at 24 MHz.
+wire hires_geometry;
+assign hires_mono = (baseclk == 2'd0) && (vidc_cr[3:2] == 2'b10) &&
+	                  (vidc_cr[1:0] == 2'b11) && hires_geometry;
+
 vidc_timing TIMING(
 	
 	.clkcpu		( clkpix		),
@@ -131,7 +146,7 @@ vidc_timing TIMING(
 	.cpu_dat 	( vid_cpu_dat	),
 
 	.clkvid		( clkpix		),
-	.cevid		( cepix		),
+	.cevid		( cevid		),
 	.rst			( rst_vid_i	),
 	.pixel_depth ( vidc_cr[3:2] ),
 	
@@ -140,7 +155,10 @@ vidc_timing TIMING(
 	.o_flyback	( flybk		),
 	.o_enabled	( enabled	),
 	.o_cursor	( cur_enabled ),
-	.o_border	( border		)
+	.o_border	( border		),
+	.o_hires_geometry ( hires_geometry ),
+	.o_cursor_phase ( cursor_phase ),
+	.o_cursor_fetch ( cursor_fetch_enabled )
 );
 
 // this module does the math for a DMA channel
@@ -150,7 +168,7 @@ vidc_dmachannel VIDEODMA (
 	.rst_dev	   ( flybk | rst_vid_i ),
 	.clkcpu		( clkcpu    ),
 	.clkdev		( clkpix    ),
-	.cedev		( cepix     ),
+	.cedev		( cevid     ),
 
 	.cpu_data	( viddat    ),
 	.ak			( vidak     ),
@@ -168,7 +186,7 @@ vidc_dmachannel #(.FIFO_SIZE(2)) CURSORDMA (
 	.rst_dev		( flybk | rst_vid_i ),
 	.clkcpu		( clkcpu    ),
 	.clkdev		( clkpix    ),
-	.cedev		( cepix     ),
+	.cedev		( cevid     ),
 
 	.cpu_data	( viddat    ),
 	.ak			( curak     ),
@@ -289,10 +307,28 @@ end
 // this simulates the DAC.
 always @(posedge clkpix) begin
 
-	if(cepix) begin
+	if(cevid) begin
 		cur_enabled_r <= cur_enabled;
 		pix_load 	<= pix_ack;
 		csr_load		<= csr_ack;
+
+		// Mode 23 cursor DMA is gathered as one complete 64-bit row before
+		// display.  Its data lifetime is therefore independent of the cursor
+		// bitmap contents and of the output serializer phase.
+		if (!hires_mono || !cursor_fetch_enabled) begin
+			hires_cursor_req_count <= 0;
+			hires_cursor_load_count <= 0;
+			hires_cursor_row_valid <= 0;
+		end else begin
+			if (csr_ack && hires_cursor_req_count < 8)
+				hires_cursor_req_count <= hires_cursor_req_count + 1'd1;
+			if (csr_load && hires_cursor_load_count < 8) begin
+				hires_cursor_row[hires_cursor_load_count * 8 +: 8] <= csr_data;
+				hires_cursor_load_count <= hires_cursor_load_count + 1'd1;
+				if (hires_cursor_load_count == 7)
+					hires_cursor_row_valid <= 1;
+			end
+		end
 		
 		enabled_d1	<= enabled;
 		enabled_d2	<= enabled_d1;
@@ -358,7 +394,10 @@ end
 
 // eqn is CE + DE + ABC + BCD (where {E,D} = {vidc_cr[3:2]} and {C,B,A} = pix_shift_count)
 assign pix_ack = hsync & enabled & ((pix_shift_count[2] & vidc_cr[3]) | ( vidc_cr[2] & vidc_cr[3]) | (pix_shift_count[0] & pix_shift_count[1] & pix_shift_count[2]) | (pix_shift_count[1] & pix_shift_count[2] &  vidc_cr[2]));
-assign csr_ack = cur_enabled & (csr_shift_count[2] & csr_shift_count[0] ) & ~csr_load & ~csr_load_count[3];
+assign csr_ack = hires_mono ?
+				 (cursor_fetch_enabled && (hires_cursor_req_count < 8)) :
+				 (cur_enabled & (csr_shift_count[2] & csr_shift_count[0]) &
+				  ~csr_load & ~csr_load_count[3]);
 
 // TODO: fix 8 bits per pixel colours.
 wire [3:0] pix_lookup = vidc_cr[3:2] == 2'b00 ? {3'd0, pix_data_latch[0]} :
@@ -366,26 +405,75 @@ wire [3:0] pix_lookup = vidc_cr[3:2] == 2'b00 ? {3'd0, pix_data_latch[0]} :
 
 wire [1:0] csr_lookup = csr_data_latch[1:0];
 
-wire [12:0] vidc_colour = cur_enabled & (csr_lookup != 2'd0) ? cur_palette[csr_lookup]   :
+wire [1:0] hires_csr_lookup;
+wire hires_cursor_opaque;
+mode23_cursor_serializer HIRES_CURSOR_SERIALIZER (
+	.clk       ( clkpix                 ),
+	.rst       ( rst_vid_i              ),
+	.ce        ( cepix                  ),
+	.enable    ( cur_enabled            ),
+	.phase     ( cursor_phase           ),
+	.row_valid ( hires_cursor_row_valid ),
+	.row_data  ( hires_cursor_row       ),
+	.lookup    ( hires_csr_lookup        ),
+	.opaque    ( hires_cursor_opaque     )
+);
+
+reg [1:0] mono_phase = 0;
+always @(posedge clkpix) begin
+	if(!hsync) mono_phase <= 0;
+	else if(cepix && hires_mono) mono_phase <= mono_phase + 1'd1;
+	else if(!hires_mono) mono_phase <= 0;
+end
+
+// The Mode 23 monochrome DAC has three native-dot output registers (r1,
+// r2 and video_rgb below).  Delay DE by the same amount so its left edge
+// begins with the first desktop dot rather than the final border dots.
+reg [2:0] hires_de_pipe = 3'd0;
+always @(posedge clkpix) begin
+	if (rst_vid_i)
+		hires_de_pipe <= 3'd0;
+	else if (cepix)
+		hires_de_pipe <= {hires_de_pipe[1:0], enabled_d2};
+end
+
+wire [1:0] cursor_lookup = hires_mono ? hires_csr_lookup : csr_lookup;
+wire cursor_opaque = hires_mono ? hires_cursor_opaque :
+							 (cur_enabled & (csr_lookup != 2'd0));
+wire mono_dot = cursor_opaque ? cur_palette[cursor_lookup][5] :
+				enabled_d2 ? vidc_palette[pix_data_latch[3:0]][mono_phase] :
+				border ? vidc_border[mono_phase] : 1'b0;
+
+wire [12:0] vidc_colour = cursor_opaque ? cur_palette[cursor_lookup]   :
 								  enabled_d2 ? vidc_palette[pix_lookup] : 
 								  border  ? vidc_border : 
 									13'd0;
 
 // render a hicolour pixel if in hicolour mode, enabled and the cursor isnt being displayed.
-wire   hicolour     = (vidc_cr[3:2] == 2'b11) & enabled_d2 & !(cur_enabled & (csr_lookup != 2'd0));
+wire   hicolour     = (vidc_cr[3:2] == 2'b11) & enabled_d2 & !cursor_opaque;
 								
-assign video_en     = border;
+// In Mode 23 the MiSTer output must describe the 1152x896 desktop, not the
+// surrounding VIDC border.  The DE pipe follows the monochrome RGB DAC,
+// so this crops only the output geometry and leaves sync, HCSR and cursor
+// timing unchanged.
+assign video_en     = hires_mono ? hires_de_pipe[2] : border;
 
 always @(posedge clkpix) begin
 	reg [3:0] r1,g1,b1,r2,g2,b2;
 
 	if(cepix) begin
-		r1[3]   <= hicolour ? pix_data_latch[4] : vidc_colour[3];
-		r1[2:0] <= vidc_colour[2:0];
-		g1[3:2] <= hicolour ? pix_data_latch[6:5] : vidc_colour[7:6];
-		g1[1:0] <= vidc_colour[5:4];
-		b1[3]	  <= hicolour ? pix_data_latch[7] : vidc_colour[11];
-		b1[2:0] <= vidc_colour[10:8];
+		if(hires_mono) begin
+			r1 <= {4{mono_dot}};
+			g1 <= {4{mono_dot}};
+			b1 <= {4{mono_dot}};
+		end else begin
+			r1[3]   <= hicolour ? pix_data_latch[4] : vidc_colour[3];
+			r1[2:0] <= vidc_colour[2:0];
+			g1[3:2] <= hicolour ? pix_data_latch[6:5] : vidc_colour[7:6];
+			g1[1:0] <= vidc_colour[5:4];
+			b1[3]	  <= hicolour ? pix_data_latch[7] : vidc_colour[11];
+			b1[2:0] <= vidc_colour[10:8];
+		end
 		
 		r2 <= r1;
 		g2 <= g1;

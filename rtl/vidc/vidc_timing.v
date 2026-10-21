@@ -44,7 +44,10 @@ module vidc_timing(
 		output        o_cursor,
 		output        o_enabled,
 		output        o_border,
-		output        o_flyback
+		output        o_flyback,
+		output        o_hires_geometry,
+		output [1:0]  o_cursor_phase,
+		output        o_cursor_fetch
     );
 
 reg [10:0] hcount;
@@ -85,8 +88,9 @@ reg [10:0]		vidc_hdsr; // horizontal display start
 reg [10:0]		vidc_hder; // horizontal display end
 reg [10:0]		vidc_hber; // horizontal border end
 
-// cursor registers 
-reg [10:0]		vidc_hcsr; // horizontal cursor start
+// cursor registers. Mode 23 uses the low two bits as native-dot phase;
+// regular VIDC modes continue to use the original coarse [12:2] value.
+reg [12:0]		vidc_hcsr;
 reg [9:0]		vidc_vcsr; // vertical cursor start
 reg [9:0]		vidc_vcer; // vertical cursor end
 
@@ -106,7 +110,7 @@ initial begin
 	vidc_hder	= 11'd0; // horizontal display end
 	vidc_hber	= 11'd0; // horizontal border end
 	
-	vidc_hcsr	= 11'd0; // horizontal cursor start
+	vidc_hcsr	= 13'd0; // horizontal cursor start
 	vidc_vcsr	= 10'd0;  // vertical cursor start
 	vidc_vcer	= 10'd0;  // vertical cursor end
 
@@ -136,7 +140,7 @@ always @(posedge clkcpu) begin
 				VIDEO_HDSR: 	vidc_hdsr <= {cpu_dat[23:14], 1'b0};
 				VIDEO_HDER: 	vidc_hder <= {cpu_dat[23:14], 1'b0};
 				
-				VIDEO_HCSR: 	vidc_hcsr <= cpu_dat[23:13];
+				VIDEO_HCSR: 	vidc_hcsr <= cpu_dat[23:11];
 					
 				VIDEO_VCSR: 	vidc_vcsr <= cpu_dat[23:14];
 				VIDEO_VCER: 	vidc_vcer <= cpu_dat[23:14];
@@ -155,10 +159,12 @@ reg hdisplay;
 reg vflyback;
 reg vcursor;
 reg hcursor;
+reg hcursor_fetch;
 reg hsync;
 reg vsync;
 
 assign o_cursor = hcursor & vcursor;
+assign o_cursor_fetch = hcursor_fetch & vcursor;
 assign o_flyback = vflyback;
 assign o_enabled = hdisplay & vdisplay;
 assign o_border = hborder & vborder;
@@ -176,9 +182,27 @@ wire [10:0] hber_end = vidc_hber;
 wire [10:0] display_pipeline = pixel_depth == 2'b11 ? 11'd4  :
 	                             pixel_depth == 2'b10 ? 11'd6  :
 	                             pixel_depth == 2'b01 ? 11'd10 : 11'd18;
-wire [10:0] hdsr_end = vidc_hdsr + display_pipeline;
-wire [10:0] hder_end = vidc_hder + display_pipeline;
-wire [10:0] hcsr_end = vidc_hcsr + 11'd5;
+// Mode 23's 24 MHz display path reaches the DAC two timing cells later than
+// the cursor path.  Move only the active display window two cells earlier:
+// 2 * 4 serializer dots = 8 native dots.  Keep the timing registers and
+// HCSR untouched so the cursor remains in the VIDC-programmed position.
+wire [10:0] mode23_display_offset =
+	(pixel_depth == 2'b10) && o_hires_geometry ? 11'd2 : 11'd0;
+wire [10:0] hdsr_end = vidc_hdsr + display_pipeline - mode23_display_offset;
+wire [10:0] hder_end = vidc_hder + display_pipeline - mode23_display_offset;
+wire mode23_hcsr = (pixel_depth == 2'b10) && o_hires_geometry;
+wire [10:0] hcsr_base = vidc_hcsr[12:2];
+assign o_cursor_phase = mode23_hcsr ? vidc_hcsr[1:0] : 2'd0;
+wire [10:0] hcsr_end = hcsr_base + 11'd5;
+// Eight bytes are fetched before the visible cursor block.  This is a fetch
+// lead only: it does not alter the raw HCSR display position.
+wire [10:0] hcsr_fetch_end = mode23_hcsr ? hcsr_end - 11'd12 : hcsr_end;
+
+// Mode 23 uses a 24 MHz timing grid and an external 4:1 serializer. Its
+// approximately 388-by-950 cycle geometry distinguishes it from normal
+// 24 MHz 4-bpp colour modes, which must retain their standard palette path.
+assign o_hires_geometry = (vidc_hcr >= 11'd384) && (vidc_hcr <= 11'd400) &&
+	                         (vidc_vcr >= 10'd940) && (vidc_vcr <= 10'd960);
 
 always @(posedge clkvid) begin
 
@@ -193,6 +217,7 @@ always @(posedge clkvid) begin
 		hdisplay <= 0;
 		vdisplay <= 0;
 		hcursor <= 0;
+		hcursor_fetch <= 0;
 		vcursor <= 0;
 	end else
 	if (cevid) begin
@@ -204,11 +229,13 @@ always @(posedge clkvid) begin
 		if (hcount == hdsr_end) hdisplay <= 1;
 		if (hcount == hder_end) hdisplay <= 0;
 		if (hcount == hcsr_end) hcursor <= 1;
+		if (hcount == hcsr_fetch_end) hcursor_fetch <= 1;
 		if (hcount == hswr_end) hsync <= 0;
 
 		if (hcount == hcr_end) begin
 			hcount <= 0;
 			hcursor <= 0;
+			hcursor_fetch <= 0;
 			hsync <= 1;
 
 			vcount <= vcount + 1'd1;

@@ -76,7 +76,7 @@ localparam CMD_LOAD_MODE       = 4'b0000;
 
 localparam MODE = { 3'b000, NO_WRITE_BURST, OP_MODE, CAS_LATENCY, ACCESS_TYPE, BURST_LENGTH}; 
 
-reg  [8:0] reset = 0;
+reg [15:0] reset = 0;
 reg [15:0] sd_dat[8]; // data output to chipset/cpu
 
 reg        sd_done = 1'b0;
@@ -105,7 +105,7 @@ localparam CYCLE_READ6      = CYCLE_READ5+ 1'd1;
 localparam CYCLE_READ7      = CYCLE_READ6+ 1'd1;
 localparam CYCLE_RFSH_END   = CYCLE_RFSH_START + RFC_DELAY; 
 
-localparam RAM_CLK          = 126000000;
+localparam RAM_CLK          = 105000000;
 localparam REFRESH_PERIOD   = (RAM_CLK / (16 * 8192));
 
 always @(posedge sd_clk) begin 
@@ -139,12 +139,19 @@ always @(posedge sd_clk) begin
 
 			reset <= reset + 1'd1;
 
-			if(reset == 32 || reset == 96) begin
+			// QMTech-friendly JEDEC-style initialization.
+			// At 126 MHz, 30000 cycles are ~238 us, safely above 200 us.
+			// PRECHARGE ALL -> AUTO REFRESH -> AUTO REFRESH -> LOAD MODE.
+			if(reset == 16'd30000) begin
 				sd_cmd  <= CMD_PRECHARGE;
 				sd_addr <= 13'b0010000000000; // precharge all banks
 			end
 
-			if(reset == 208) begin
+			if(reset == 16'd30016 || reset == 16'd30032) begin
+				sd_cmd  <= CMD_AUTO_REFRESH;
+			end
+
+			if(reset == 16'd30048) begin
 				sd_cmd  <= CMD_LOAD_MODE;
 				sd_addr <= MODE;
 			end

@@ -366,7 +366,7 @@ wire [31:0] vratio[16] =
 
 wire [3:0] vmode = {pixbaseclk_video,selpix};
 
-localparam  CLKSYS = 42000000;
+localparam  CLKSYS = 35000000;
 
 reg         cepix_native = 0;
 reg         cevid_native = 0;
